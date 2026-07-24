@@ -1,0 +1,91 @@
+
+----------------------------------------------------
+INSTRUMENT FILE FORMAT
+----------------------------------------------------
+
+
+(1 byte) Number of Jump Points
+
+For each jump point:
+	|
+	| (4 bytes) Jump point value
+	|
+
+(1 byte) Operator mapping
+
+(1 byte) Volume
+
+(1 byte) Glide
+
+(1 byte) Scatter
+
+(1 byte) Algorithm type
+
+(1 byte) Arppeggio speed/length
+
+For all 15 arp values:
+	|
+	| (1 byte) Arp value
+	|
+
+For all 4 modulation paths:
+	|
+	| (1 byte) Modulation type/scale
+	|
+
+For all 4 samples:
+	|
+	| (1 byte) # of frames
+	|
+	| For all frames:
+	|	|
+	|	| (1 byte) Frame value
+	|	|
+	|
+	| (1 byte) Oerator type + fuzz level
+	|
+	| (1 byte) Fuzz type
+	|
+	| If using waveform type:
+	|	|
+	|	| (1 byte) Duty cycle
+	|	|
+	|	| (1 byte) Smoothness
+	|	|
+	|	| (1 byte) Number of sine waves (for sine approx. wave types)
+	|	|
+	|
+	| (1 byte) Wave type + Loop type
+	|
+	| (1 byte) Offset + Octave
+	|
+	| (1 byte) Release
+	|
+	| (1 byte) Boolean flags
+	|
+	| (4 bytes) Loop start
+	|
+	| (4 bytes) Loop end
+	|
+	| For all 11 frequencies:
+	|	|
+	|	| (1 byte) Frequency value
+	|	|
+	|
+	| (1 byte) Envelope length
+	|
+	| (1 byte) Envelope starting amp
+	|
+	| (1 byte) Envelope scale
+	|
+	| (1 byte) Number of envelope points
+	|
+	| For all points:
+	|	|
+	|	| (1 byte) Point position
+	|	|
+	|	| (1 byte) Point amplitude
+	|	|
+	|
+	|
+	|

@@ -1,0 +1,94 @@
+
+----------------------------------------------------
+SONG FILE FORMAT
+----------------------------------------------------
+
+
+(1 byte) Version number
+
+(1 byte) Artist name length
+
+For each character:
+	|
+	| (1 byte) Artist name character
+	|
+
+
+(1 byte) BPM
+
+(1 byte) EDO
+
+(1 byte) Pattern sequence size
+
+For each pattern sequence index:
+	|
+	| (1 byte) Pattern index
+	|
+
+(1 byte) Number of patterns
+
+For each pattern:
+	|
+	| For all 8 channels:
+	|	|
+	|	| (1 byte) Channel pattern index
+	|	|
+
+For each channel:
+	|
+	| (1 byte) Number of patterns
+	|
+	|	| For each pattern:
+	|	|	|
+	|	|	| (1 byte) Number of rows in channel pattern
+	|	|	|
+	|	|	| (1 byte) Beats per measure  in channel pattern
+	|	|	|
+	|	|	| (1 byte) Stereo
+	|	|	|
+	|	|	| (1 byte) Loop at end
+	|	|	|
+	|	|	| (1 byte) Size of note sequence
+	|	|	|
+	|	|	| For each note sequence index:
+	|	|	|	|
+	|	|	|	| (1 byte) Index value
+	|	|	|	|
+	|	|	|
+	|	|	|	
+	|	|	| (1 byte) Size of volume sequence
+	|	|	|
+	|	|	| For each volume sequence index:
+	|	|	|	|
+	|	|	|	| (1 byte) Index value
+	|	|	|	|
+	|	|	|
+	|	|	|	
+	|	|	| (1 byte) Size of effect sequence
+	|	|	|
+	|	|	| For each effect sequence index:
+	|	|	|	|
+	|	|	|	| (1 byte) Index value
+	|	|	|	|
+	|	|	|
+	|	|
+	|
+
+
+For all 256 samples:
+	|
+	| (1 byte) Sample enabled
+	|
+
+For all enabled samples:
+	|
+	| (1 byte) Sample name length
+	|
+	| For each character:
+	|	|
+	|	| (1 byte) Sample name character
+	|	|
+	|
+	| (x bytes) Sample data. SEE SAMPLE FORMAT
+	|
+
