@@ -28,7 +28,6 @@ void selectAlgorithmOperator(Vector2 pos);
 
 void ClickFloatingWindow(FloatingWindow* wind, int windowIndex, Vector2 clickPos, GLFWwindow* windMain)
 {
-	//std::lock_guard<std::shared_mutex> lock(mtx);
 
 	clickPos.x = int(clickPos.x);
 	clickPos.y = int(clickPos.y);
@@ -46,9 +45,6 @@ void ClickFloatingWindow(FloatingWindow* wind, int windowIndex, Vector2 clickPos
 			windowController.windows.shrink_to_fit();
 			gui.drawUIThisFrame = true;
 			gui.drawFrameThisFrame = true;
-			//gui.scrollBars[4].topLeft = { -1,-1 }; // Reset the position of the file scrollbar to hide it.
-			//gui.scrollBars[4].position = 0;
-			//gui.scrollBars[4].length = 0;
 			screen.mouseDown = false;
 			return;
 		}
@@ -134,7 +130,6 @@ void ClickFloatingWindow(FloatingWindow* wind, int windowIndex, Vector2 clickPos
 					if (!frameUsed[i])
 					{
 						PatternIndexTable newPattern;
-						//newPattern.beatsPerMeasure = loadedPattern.beatsPerMeasure;
 						loadedSong.patterns[i] = newPattern;
 					}
 				}
@@ -182,16 +177,6 @@ void ClickFloatingWindow(FloatingWindow* wind, int windowIndex, Vector2 clickPos
 		}
 		else if (wind->name == "Load File")
 		{
-			
-			// Scroll arrows.
-			//if (clickPos.x == 1)
-			//{
-			//	if (clickPos.y == 2)
-			//		fileNavigator.fileListScroll--;
-			//	else if (clickPos.y == 11)
-			//		fileNavigator.fileListScroll++;
-			//}
-
 
 			if (clickPos.y == 1 && clickPos.x == 1)
 			{
@@ -228,7 +213,7 @@ void ClickFloatingWindow(FloatingWindow* wind, int windowIndex, Vector2 clickPos
 					for (int ch = 0; ch < 8; ch++)
 					{
 						for (int op = 0; op < 4; op++)
-							channels[ch].waveforms[op].sampleReadPos = 0;
+							channels[ch].waveforms[op].sampleReadPos = 0.0f;
 					}
 
 					ma_decoder loadingDecoder;
@@ -271,25 +256,13 @@ void ClickFloatingWindow(FloatingWindow* wind, int windowIndex, Vector2 clickPos
 					loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopEnd = loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames.size();
 					// Usually, samples are not continuous waves. They are retriggered every time a note is played.
 					loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].continueNote = false;
-					loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopType = 0;
+					loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loop = false;
 
 					ma_decoder_uninit(&loadingDecoder);
 
 					///////////////////////////////////////////////////////////// End.
 
-					/*
-					if (editor.selectedSample >= loadedSamples.size())
-					{
-						loadedSamples.emplace_back(newSample);
-						loadedSamples[loadedSamples.size() - 1].LoadSampleData();
-					}
-					else
-					{
-						editor.selectedSample++;
-						loadedSamples.emplace(loadedSamples.begin() + editor.selectedSample, newSample);
-						loadedSamples[editor.selectedSample].LoadSampleData();
-						//LoadSampleData(editor.selectedSample);
-					}*/
+
 					if (sampleDisplay.visible)
 					{
 						DrawSampleDisplay();
@@ -327,7 +300,6 @@ void ClickFloatingWindow(FloatingWindow* wind, int windowIndex, Vector2 clickPos
 		}
 		else if (wind->name == "Save Song" || wind->name == "Save Instrument" || wind->name == "Save Sample")
 		{
-			//gui.scrollBars[4].length = 17;
 			if (clickPos.y == 1 && clickPos.x == 1)
 			{
 				fileNavigator.ExitFile();
@@ -336,8 +308,6 @@ void ClickFloatingWindow(FloatingWindow* wind, int windowIndex, Vector2 clickPos
 			}
 			else if (clickPos.y == 19 && clickPos.x > 28 && clickPos.x < 35) // Save.
 			{
-				//std::string fileN = fileNavigator.fileNames[editor.selectedFile];
-				//fileN.erase(0, 1);
 				if (wind->name == "Save Song")
 					SaveSong();
 				else if (wind->name == "Save Instrument")
@@ -456,13 +426,8 @@ void ClickFloatingWindow(FloatingWindow* wind, int windowIndex, Vector2 clickPos
 				}
 			}
 		}
-		else if (wind->name == "Help")
-		{
-			//gui.scrollBars[4].length = 37;
-		}
 		else if (wind->name == "Export as .WAV")
 		{
-			//gui.scrollBars[4].length = 17;
 			if (clickPos.y == 1 && clickPos.x == 1)
 			{
 				fileNavigator.ExitFile();
@@ -471,8 +436,6 @@ void ClickFloatingWindow(FloatingWindow* wind, int windowIndex, Vector2 clickPos
 			}
 			else if (clickPos.y == 19 && clickPos.x > 28 && clickPos.x < 37) // Save.
 			{
-				//std::string fileN = fileNavigator.fileNames[editor.selectedFile];
-				//fileN.erase(0, 1);
 				windowController.windows.erase(windowController.windows.begin() + windowIndex);
 				windowController.windows.shrink_to_fit();
 				gui.drawUIThisFrame = true;
@@ -491,8 +454,6 @@ void ClickFloatingWindow(FloatingWindow* wind, int windowIndex, Vector2 clickPos
 				windowController.InitializeWindow("Exporting...", { 45, 20 }, { 10, 3 });
 
 				editor.toRecordSong = true;
-				//RecordSong();
-				//SaveSong();
 			}
 			else if (clickPos.y > 0 && clickPos.x > 0 && clickPos.x < 39)
 			{
@@ -569,7 +530,6 @@ void ClickFloatingWindow(FloatingWindow* wind, int windowIndex, Vector2 clickPos
 					}
 
 					sampleDisplay.drawing = false; // Stop sample drawing.
-					sampleDisplay.zoomed = false; // Reset zoom.
 					loadedSong.unsavedChanges = true;
 					return;
 				}
@@ -599,25 +559,6 @@ void ClickFloatingWindow(FloatingWindow* wind, int windowIndex, Vector2 clickPos
 				{
 					loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].generateFromSines = !loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].generateFromSines;
 					GenerateAdditiveWave(&loadedInstruments[editor.selectedInstrument], sampleDisplay.selectedOperator);
-					DrawSampleDisplay();
-					loadedSong.unsavedChanges = true;
-					return;
-				}
-				else if (clickPos.y == 9) // Set sample to loop
-				{
-					for (int ch = 0; ch < 8; ch++)
-					{
-						for (int wave = 0;wave < 4; wave++)
-						{
-							channels[ch].waveforms[wave].sampleReadPos = 0.0f;
-						}
-					}
-
-					loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopType++;
-					if (loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopType > 2)
-						loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopType = 0;
-					
-
 					DrawSampleDisplay();
 					loadedSong.unsavedChanges = true;
 					return;
@@ -657,6 +598,24 @@ void ClickFloatingWindow(FloatingWindow* wind, int windowIndex, Vector2 clickPos
 					loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].useArp = !loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].useArp;
 
 				DrawSampleDisplay();
+			}
+			else if (int(clickPos.y) == 9) // Toggle loop.
+			{
+				if (clickPos.x == 6)
+				{
+					for (int ch = 0; ch < 8; ch++)
+					{
+						for (int wave = 0;wave < 4; wave++)
+						{
+							channels[ch].waveforms[wave].sampleReadPos = 0.0f;
+						}
+					}
+
+					loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loop = !loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loop;
+
+					DrawSampleDisplay();
+					loadedSong.unsavedChanges = true;
+				}
 			}
 			else if (int(clickPos.y) == 10) // Toggle continue note.
 			{
@@ -749,7 +708,6 @@ void ClickFloatingWindow(FloatingWindow* wind, int windowIndex, Vector2 clickPos
 				if (clickPos.x == 32) // Select operator.
 				{
 					sampleDisplay.drawing = false; // Stop sample drawing.
-					sampleDisplay.zoomed = false; // Reset zoom.
 					sampleDisplay.selectedOperator = clickPos.y - 18;
 					DrawSampleDisplay();
 				}
@@ -773,47 +731,7 @@ void ClickFloatingWindow(FloatingWindow* wind, int windowIndex, Vector2 clickPos
 			{
 				if (sampleDisplay.displayType == 0) // Sample display
 				{
-					if (clickPos.y < 27) // Set jump points.
-					{
-						float posX = (gui.floatHoveredTile.x - windowController.windows[windowIndex].position.x - 1.0f) * 16.0f;
-
-						if (sampleDisplay.enableSnap)
-						{
-							posX /= 528.0f;
-							posX *= sampleDisplay.snapSubdivisions;
-							posX += 0.5f;
-							posX = int(posX);
-							posX /= sampleDisplay.snapSubdivisions;
-							posX *= 528.0f;
-						}
-
-						int frameIndex = (posX / 528.0f) * loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames.size();
-
-						if (loadedInstruments[editor.selectedInstrument].jumpPoints.size() == 0)
-							loadedInstruments[editor.selectedInstrument].jumpPoints.emplace_back(frameIndex);
-						else
-						{
-							bool afterLastJump = false;
-							int addPos = 0;
-							while (!afterLastJump)
-							{
-								if (addPos >= loadedInstruments[editor.selectedInstrument].jumpPoints.size())
-									afterLastJump = true;
-								else if (loadedInstruments[editor.selectedInstrument].jumpPoints[addPos] <= frameIndex)
-								{
-									afterLastJump = true;
-								}
-								else
-								{
-									addPos++;
-								}
-							}
-
-							loadedInstruments[editor.selectedInstrument].jumpPoints.emplace(loadedInstruments[editor.selectedInstrument].jumpPoints.begin() + addPos, frameIndex);
-						}
-						loadedSong.unsavedChanges = true;
-					}
-					else if (clickPos.y > 35) // Move loop points.
+					if (clickPos.y > 35) // Move loop points.
 					{
 						float posX = (gui.floatHoveredTile.x - windowController.windows[windowIndex].position.x) * 16.0f - 8.0f;
 						float lStartPos = float(loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopStart) * (528.0f / float(loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames.size()));
@@ -852,18 +770,7 @@ void ClickFloatingWindow(FloatingWindow* wind, int windowIndex, Vector2 clickPos
 
 						int frameIndex = (loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames.size()) * posX;
 
-						if (sampleDisplay.zoomed)
-						{
-							float zoomStart = sampleDisplay.zoomStart;
-							float zoomEnd = sampleDisplay.zoomEnd;
-							float zoomScale = (zoomEnd - zoomStart) / loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames.size();
-
-							frameIndex *= zoomScale;
-							frameIndex += zoomStart;
-						}
-
 						sampleDisplay.sampleStartPos = frameIndex;
-						sampleDisplay.sampleSelectionEnd = frameIndex;
 					}
 					DrawSampleDisplay();
 				}
@@ -925,7 +832,7 @@ void ClickFloatingWindow(FloatingWindow* wind, int windowIndex, Vector2 clickPos
 					if (!editor.playingSong) // Play the note sound.
 					{
 						channels[0].resetChannelEffects(true);
-						StartNote(0, editor.selectedInstrument, 48, 0);
+						StartNote(0, editor.selectedInstrument, 48);
 						
 						sampleDisplay.playingInstrument = true;
 						for (int wave = 0; wave < 4; wave++)
@@ -946,30 +853,6 @@ void ClickFloatingWindow(FloatingWindow* wind, int windowIndex, Vector2 clickPos
 						if (loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].operatorType == 1)
 						{
 							sampleDisplay.drawing = !sampleDisplay.drawing;
-							DrawSampleDisplay();
-							loadedSong.unsavedChanges = true;
-						}
-					}
-					else if (clickPos.x == 28 || clickPos.x == 29) // Toggle zoom sample
-					{
-						if (loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].operatorType == 1)
-						{
-							if (!sampleDisplay.zoomed && sampleDisplay.sampleStartPos == sampleDisplay.sampleSelectionEnd) // You cannot zoom if there is no selection.
-								return;
-
-							sampleDisplay.zoomed = !sampleDisplay.zoomed;
-
-							if (sampleDisplay.zoomed)
-							{
-								sampleDisplay.zoomStart = sampleDisplay.sampleStartPos;
-								sampleDisplay.zoomEnd = sampleDisplay.sampleSelectionEnd;
-							}
-							else
-							{
-								sampleDisplay.zoomStart = 0;
-								sampleDisplay.zoomEnd = loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames.size() - 1;
-							}
-
 							DrawSampleDisplay();
 							loadedSong.unsavedChanges = true;
 						}
@@ -1005,299 +888,6 @@ void ClickFloatingWindow(FloatingWindow* wind, int windowIndex, Vector2 clickPos
 				}
 			}
 			
-		}
-		else if (wind->name == "Sample Selection")
-		{
-			if (clickPos.y == 2) // Cut
-			{
-				int frameDiff = (sampleDisplay.sampleSelectionEnd - sampleDisplay.sampleStartPos);
-
-				if (frameDiff < 1) // No area selected.
-				{
-					DrawSampleDisplay();
-					windowController.windows.erase(windowController.windows.begin() + windowIndex);
-					windowController.windows.shrink_to_fit();
-					gui.drawUIThisFrame = true;
-					gui.drawFrameThisFrame = true;
-					loadedSong.unsavedChanges = true;
-					return;
-				}
-
-				for (int i = sampleDisplay.sampleSelectionEnd; i < loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames.size(); i++)
-				{
-					loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames[i - frameDiff] = loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames[i];
-				}
-
-
-				
-				loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames.resize(loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames.size() - (sampleDisplay.sampleSelectionEnd - sampleDisplay.sampleStartPos));
-				loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames.shrink_to_fit();
-				
-
-				if (loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopStart > sampleDisplay.sampleStartPos)
-					loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopStart -= (sampleDisplay.sampleSelectionEnd - sampleDisplay.sampleStartPos);
-				if (loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopEnd > sampleDisplay.sampleStartPos)
-					loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopEnd -= (sampleDisplay.sampleSelectionEnd - sampleDisplay.sampleStartPos);
-				
-				if (sampleDisplay.sampleStartPos > loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames.size())
-					sampleDisplay.sampleStartPos = loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames.size();
-
-
-				sampleDisplay.sampleSelectionEnd = sampleDisplay.sampleStartPos;
-
-
-				DrawSampleDisplay();
-				windowController.windows.erase(windowController.windows.begin() + windowIndex);
-				windowController.windows.shrink_to_fit();
-				gui.drawUIThisFrame = true;
-				gui.drawFrameThisFrame = true;
-				loadedSong.unsavedChanges = true;
-			}
-			else if (clickPos.y == 4) // Open sample volume window.
-			{
-				windowController.windows.erase(windowController.windows.begin() + windowIndex);
-				windowController.windows.shrink_to_fit();
-				gui.drawUIThisFrame = true;
-				gui.drawFrameThisFrame = true;
-				editor.transposeValue = 0;
-				sampleDisplay.resampleNote = 48.0f - loadedSong.edo * 4;
-				sampleDisplay.resampleFineTune = 0.0f;
-				sampleDisplay.resampleMultiplier = 1.0f;
-				windowController.InitializeWindow("Resample Sample", { int(gui.hoveredTile.x), int(gui.hoveredTile.y) }, { 16, 12 });
-			}
-			else if (clickPos.y == 6) // Delete frames
-			{
-				windowController.windows.erase(windowController.windows.begin() + windowIndex);
-				windowController.windows.shrink_to_fit();
-				gui.drawUIThisFrame = true;
-				gui.drawFrameThisFrame = true;
-				editor.transposeValue = 0;
-				windowController.InitializeWindow("Sample Volume", { int(gui.hoveredTile.x), int(gui.hoveredTile.y) }, { 16, 6 });
-				sampleDisplay.volumeMultiplier = 1.0f;
-			}
-			else if (clickPos.y == 8) // Set loop
-			{
-				loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopStart = sampleDisplay.sampleStartPos;
-				loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopEnd = sampleDisplay.sampleSelectionEnd;
-				if (loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopEnd == loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopStart) // Make sure that the loop ends are not the same.
-					loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopEnd++;
-				windowController.windows.erase(windowController.windows.begin() + windowIndex);
-				windowController.windows.shrink_to_fit();
-				gui.drawUIThisFrame = true;
-				gui.drawFrameThisFrame = true;
-				DrawSampleDisplay();
-				loadedSong.unsavedChanges = true;
-			}
-			else if (clickPos.y == 10) // Fade out
-			{
-				for (int i = sampleDisplay.sampleStartPos; i < sampleDisplay.sampleSelectionEnd; i++)
-				{
-					loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames[i] *= 1.0f - float(i - sampleDisplay.sampleStartPos) / float(sampleDisplay.sampleSelectionEnd - sampleDisplay.sampleStartPos);
-				}
-
-
-				windowController.windows.erase(windowController.windows.begin() + windowIndex);
-				windowController.windows.shrink_to_fit();
-				gui.drawUIThisFrame = true;
-				gui.drawFrameThisFrame = true;
-				DrawSampleDisplay();
-				loadedSong.unsavedChanges = true;
-			}
-			else if (clickPos.y == 12) // Fade in
-			{
-				for (int i = sampleDisplay.sampleStartPos; i < sampleDisplay.sampleSelectionEnd; i++)
-				{
-					loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames[i] *= float(i - sampleDisplay.sampleStartPos) / float(sampleDisplay.sampleSelectionEnd - sampleDisplay.sampleStartPos);
-				}
-
-
-				windowController.windows.erase(windowController.windows.begin() + windowIndex);
-				windowController.windows.shrink_to_fit();
-				gui.drawUIThisFrame = true;
-				gui.drawFrameThisFrame = true;
-				DrawSampleDisplay();
-				loadedSong.unsavedChanges = true;
-			}
-			else if (clickPos.y == 14) // Copy frames
-			{
-				sampleDisplay.copyFrames.clear();
-				for (int i = sampleDisplay.sampleStartPos; i < sampleDisplay.sampleSelectionEnd; i++)
-					sampleDisplay.copyFrames.emplace_back(loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames[i]);
-
-
-				windowController.windows.erase(windowController.windows.begin() + windowIndex);
-				windowController.windows.shrink_to_fit();
-				DrawSampleDisplay();
-				loadedSong.unsavedChanges = true;
-			}
-			else if (clickPos.y == 16) // Paste frames
-			{
-				for (int i = 0; i < sampleDisplay.copyFrames.size(); i++)
-				{
-					loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames.emplace(loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames.begin() + sampleDisplay.sampleStartPos + i, sampleDisplay.copyFrames[i]);
-				}
-				
-
-				windowController.windows.erase(windowController.windows.begin() + windowIndex);
-				windowController.windows.shrink_to_fit();
-				DrawSampleDisplay();
-				loadedSong.unsavedChanges = true;
-			}
-		}
-		else if (wind->name == "Resample Sample")
-		{
-			bool valUpdated = false;
-			if (clickPos.y == 3)
-			{
-				if (clickPos.x == 2)
-				{
-					sampleDisplay.resampleFineTune += 0.01f;
-					valUpdated = true;
-				}
-				if (clickPos.x == 4)
-				{
-					sampleDisplay.resampleFineTune -= 0.01f;
-					valUpdated = true;
-				}
-			}
-			else if (clickPos.y == 5)
-			{
-				if (clickPos.x == 2)
-				{
-					sampleDisplay.resampleNote++;
-					valUpdated = true;
-				}
-				if (clickPos.x == 4)
-				{
-					sampleDisplay.resampleNote--;
-					valUpdated = true;
-				}
-			}
-			else if (clickPos.y == 9)
-			{
-				editor.selectedButton = 28;
-				gui.selectedWindowTile = clickPos;
-				gui.selectedTile.x = clickPos.x + wind->position.x;
-
-			}
-			else if (clickPos.y == 11) // Apply the resampling.
-			{
-				if (clickPos.x > 7 && clickPos.x < 15)
-				{
-					float multiplier = sampleDisplay.resampleMultiplier;
-
-					std::vector <float> newPcmFrames;
-					float selectionSize = (sampleDisplay.sampleSelectionEnd - sampleDisplay.sampleStartPos) * sampleDisplay.resampleMultiplier;
-					float selectionEndPos = (sampleDisplay.sampleStartPos) + selectionSize;
-					float sampleSize = loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames.size() + selectionSize - float(sampleDisplay.sampleSelectionEnd - sampleDisplay.sampleStartPos);
-
-					//newPcmFrames.assign(sampleSize, 0.0f);
-
-					
-					float newIndex = 0.0f;
-					for (int i = 0; i < sampleSize; i++)
-					{
-						ma_uint32 index1 = newIndex;
-						ma_uint32 index2 = index1 + 1;
-
-						float t = newIndex - index1;  // Fractional part
-
-						if (index1 >= loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames.size())
-							index1 = 0;
-						if (index2 >= loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames.size())
-							index2 = 0;
-
-						float frameVol = loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames[index1] * (1.0f - t) + loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames[index2] * t;
-
-						newPcmFrames.emplace_back(frameVol);
-
-
-						if (i > sampleDisplay.sampleStartPos && i < selectionEndPos)
-							newIndex += 1.0f / multiplier;
-						else
-							newIndex++;
-					}
-
-					loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames.resize(loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames.size());
-					loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames = newPcmFrames;
-
-
-					if (loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopStart > sampleDisplay.sampleStartPos)
-					{
-						float inSelection = (loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopStart - (sampleDisplay.sampleStartPos)) * sampleDisplay.resampleMultiplier;
-						float afterSelection = (loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopStart - (sampleDisplay.sampleSelectionEnd));
-						if (afterSelection > 0)
-							loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopStart = selectionEndPos + afterSelection;
-						else
-							loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopStart = (sampleDisplay.sampleStartPos) + inSelection;
-					}
-
-					if (loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopEnd > sampleDisplay.sampleStartPos)
-					{
-						float inSelection = (loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopEnd - (sampleDisplay.sampleStartPos)) * sampleDisplay.resampleMultiplier;
-						float afterSelection = (loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopEnd - (sampleDisplay.sampleSelectionEnd));
-						if (afterSelection > 0)
-							loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopEnd = selectionEndPos + afterSelection + 1;
-						else
-							loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopEnd = (sampleDisplay.sampleStartPos) + inSelection + 1;
-					}
-
-					// Clamp loop points.
-					if (loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopStart < 0)
-						loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopStart = 0;
-					if (loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopEnd < 0)
-						loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopEnd = 0;
-					if (loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopStart >= loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames.size())
-						loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopStart = loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames.size() - 1;
-					if (loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopEnd >= loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames.size())
-						loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopEnd = loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames.size() - 1;
-
-					
-					sampleDisplay.sampleSelectionEnd = selectionEndPos;
-
-					windowController.windows.erase(windowController.windows.begin() + windowIndex);
-					windowController.windows.shrink_to_fit();
-					gui.drawUIThisFrame = true;
-					gui.drawFrameThisFrame = true;
-					DrawSampleDisplay();
-					loadedSong.unsavedChanges = true;
-				}
-			}
-			if (valUpdated)
-			{
-				sampleDisplay.resampleMultiplier = (1.0f / pow(2, sampleDisplay.resampleNote / float(loadedSong.edo))) + sampleDisplay.resampleFineTune;
-			}
-		}
-		else if (wind->name == "Sample Volume")
-		{
-			if (clickPos.y == 3)
-			{
-				if (clickPos.x == 2)
-				{
-					sampleDisplay.volumeMultiplier += 0.1f;
-				}
-				if (clickPos.x == 4)
-				{
-					sampleDisplay.volumeMultiplier -= 0.1f;
-				}
-			}
-			else if (clickPos.y == 5) // Apply the volume change.
-			{
-				if (clickPos.x > 7 && clickPos.x < 15)
-				{
-					for (int i = sampleDisplay.sampleStartPos; i < sampleDisplay.sampleSelectionEnd; i++)
-					{
-						loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames[i] *= sampleDisplay.volumeMultiplier;
-					}
-
-					windowController.windows.erase(windowController.windows.begin() + windowIndex);
-					windowController.windows.shrink_to_fit();
-					gui.drawUIThisFrame = true;
-					gui.drawFrameThisFrame = true;
-					DrawSampleDisplay();
-					loadedSong.unsavedChanges = true;
-				}
-			}
 		}
 		else if (wind->name == "Algorithms")
 		{
@@ -1461,7 +1051,6 @@ void ClickFloatingWindow(FloatingWindow* wind, int windowIndex, Vector2 clickPos
 				{
 					instrumentFloatingWindow.selectedInstrument = clickPos.y - 1 + instrumentFloatingWindow.instrumentListScroll;
 					sampleDisplay.drawing = false; // Stop sample drawing.
-					sampleDisplay.zoomed = false; // Reset zoom.
 					sampleDisplay.selectedOperator = 0; // Select the first sample operator.
 				}
 			}
@@ -1476,14 +1065,7 @@ void ClickFloatingWindow(FloatingWindow* wind, int windowIndex, Vector2 clickPos
 
 
 
-	//if (windowIndex > 0) // Move the dragged window to front.
-	//{
-	//	FloatingWindow moveWind = windowController.windows[windowIndex];
-	//	windowController.windows.erase(windowController.windows.begin() + windowIndex);
-	//	windowController.windows.emplace(windowController.windows.begin(), moveWind);
-	//	windowController.windows.shrink_to_fit();
-	//	windowIndex = 0;
-	//}
+
 
 	return;
 }
@@ -1506,36 +1088,7 @@ void RightClickFloatingWindow(FloatingWindow* wind, int windowIndex, Vector2 cli
 		{
 			if (loadedInstruments[editor.selectedInstrument].enabled)
 			{
-				if (sampleDisplay.displayType == 0) // Sample display
-				{
-					if (clickPos.y > 25 && clickPos.y < 38 && editor.selectedInstrument > -1)
-					{
-						if (clickPos.y < 27) // Delete jump points.
-						{
-							float posX = (gui.floatHoveredTile.x - windowController.windows[windowIndex].position.x) * 16.0f - 8.0f;
-							for (int i = 0; i < loadedInstruments[editor.selectedInstrument].jumpPoints.size(); i++)
-							{
-								float iPos = float(loadedInstruments[editor.selectedInstrument].jumpPoints[i]) * (528.0f / float(loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames.size()));
-								//int iPos = (loadedSamples[editor.selectedSample]->jumpPoints[i]) * (1.0f / loadedSamples[editor.selectedSample]->pcmFrames.size()) * 800.0f;
-								if (abs(iPos - posX) < 16)
-								{
-									loadedInstruments[editor.selectedInstrument].jumpPoints.erase(loadedInstruments[editor.selectedInstrument].jumpPoints.begin() + i);
-									loadedInstruments[editor.selectedInstrument].jumpPoints.shrink_to_fit();
-									DrawSampleDisplay();
-									loadedSong.unsavedChanges = true;
-									return;
-								}
-							}
-						}
-						else // Open the selection menu.
-						{
-							if (loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].operatorType == 1)
-								windowController.InitializeWindow("Sample Selection", { int(gui.hoveredTile.x), int(gui.hoveredTile.y) }, { 16, 19 });
-						}
-						DrawSampleDisplay();
-					}
-				}
-				else if (sampleDisplay.displayType == 1) // Envelope display
+				if (sampleDisplay.displayType == 1) // Envelope display
 				{
 					if (clickPos.y > 24)
 					{
@@ -1967,15 +1520,7 @@ void HoldClickFloatingWindow(FloatingWindow* wind, int windowIndex, Vector2 clic
 
 						int frameIndex = (loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames.size()) * posX;
 
-						if (sampleDisplay.zoomed)
-						{
-							float zoomStart = sampleDisplay.zoomStart;
-							float zoomEnd = sampleDisplay.zoomEnd;
-							float zoomScale = (zoomEnd - zoomStart) / loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames.size();
 
-							frameIndex *= zoomScale;
-							frameIndex += zoomStart;
-						}
 
 						sampleDisplay.drawWavePos = { float(frameIndex), posY };
 						DrawSamplePoint(sampleDisplay.drawWavePos);
@@ -1991,17 +1536,6 @@ void HoldClickFloatingWindow(FloatingWindow* wind, int windowIndex, Vector2 clic
 
 						int frameIndex = (loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames.size()) * posX;
 
-						if (sampleDisplay.zoomed)
-						{
-							float zoomStart = sampleDisplay.zoomStart;
-							float zoomEnd = sampleDisplay.zoomEnd;
-							float zoomScale = (zoomEnd - zoomStart) / loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames.size();
-
-							frameIndex *= zoomScale;
-							frameIndex += zoomStart;
-						}
-
-						sampleDisplay.sampleSelectionEnd = frameIndex;
 						DrawSampleDisplay();
 					}
 					loadedSong.unsavedChanges = true;

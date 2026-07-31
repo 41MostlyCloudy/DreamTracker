@@ -130,10 +130,6 @@ void unrollPatternChannel(UnrolledPattern* pattern, RolledChannel channel, int c
 	//	1 byte: Effect
 	//	1 byte: Effect value
 
-	//if (channel.rows > pattern->rows.size())
-	//	resizeUnrolledPatternRows(pattern, int(channel.rows));
-	//newPattern.beatsPerMeasure = pattern.beatsPerMeasure;
-
 
 
 	channels[ch].stereo = channel.stereo;
@@ -142,6 +138,7 @@ void unrollPatternChannel(UnrolledPattern* pattern, RolledChannel channel, int c
 
 
 	pattern->channels[ch].rows = channel.rows;
+	pattern->channels[ch].data.clear();
 	pattern->channels[ch].data.resize(channel.rows);
 
 	pattern->channels[ch].beatsPerMeasure = channel.beatsPerMeasure;
@@ -279,7 +276,7 @@ void resizeUnrolledChannelRows(UnrolledChannel* ch, int newSize)
 	{
 		for (int fr = 0; fr < newSize; fr++)
 		{
-			UnrolledRow newR;;
+			UnrolledRow newR;
 			ch->data.emplace_back(newR);
 		}
 	}
@@ -454,48 +451,6 @@ void deleteNotes()
 		}
 	}
 
-
-
-	/*
-
-	for (int y = editor.noteSelectionStart.y; y <= editor.noteSelectionEnd.y; y++)
-	{
-		for (int x = editor.noteSelectionStart.x; x < editor.noteSelectionEnd.x; x++)
-		{
-			Vector2 selection = findFrameTileByPosition(x);
-
-			if (selection.y < 0)
-				continue;
-
-			if (selection.x != -1)
-			{
-				int selectedChannel = selection.x;
-				int selectedPart = selection.y;
-
-				if (selectedPart == -2) // Entire channel selected.
-				{
-					loadedPattern.rows[y].note[selectedChannel] = -1;
-					loadedPattern.rows[y].instrument[selectedChannel] = -1;
-					loadedPattern.rows[y].volume[selectedChannel] = -1;
-					loadedPattern.rows[y].effects[selectedChannel] = -1;
-					x += 2;
-				}
-				else if (selectedPart < 5)
-				{
-					loadedPattern.rows[y].note[selectedChannel] = -1;
-					loadedPattern.rows[y].instrument[selectedChannel] = -1;
-				}
-				else if (selectedPart < 7)
-					loadedPattern.rows[y].volume[selectedChannel] = -1;
-				else
-					loadedPattern.rows[y].effects[selectedChannel] = -1;
-			}
-		}
-	}
-	loadedSong.unsavedChanges = true;
-
-	*/
-
 	return;
 }
 
@@ -503,37 +458,34 @@ void deleteNotes()
 
 void transposeNotes()
 {
-	/*
-	for (int y = editor.noteSelectionStart.y; y <= editor.noteSelectionEnd.y; y++)
+	if (editor.playingSong) // Set the selected area to the playing position.
 	{
-		for (int x = editor.noteSelectionStart.x; x < editor.noteSelectionEnd.x; x++)
+		editor.noteSelectionStart.y = loadedSong.currentNote;
+		editor.noteSelectionEnd.y = loadedSong.currentNote;
+	}
+
+	// Create mouse selection frame.
+	int rows = int(editor.noteSelectionEnd.y + 1 - editor.noteSelectionStart.y);
+	int leftMostChannel = findFrameTileByPosition(editor.noteSelectionStart.x).x;
+	int rightMostChannel = findFrameTileByPosition(editor.noteSelectionEnd.x).x;
+
+
+	for (int ch = leftMostChannel; ch <= rightMostChannel; ch++)
+	{
+		for (int y = editor.noteSelectionStart.y; y <= editor.noteSelectionEnd.y; y++)
 		{
-			Vector2 selection = findFrameTileByPosition(x);
 
-			if (selection.y < 0)
-				continue;
-
-			if (selection.x != -1)
+			// Add any parts of the channel inside the selected area.
+			int notePos = ch * 11;
+			if (notePos + 4 >= editor.noteSelectionStart.x && notePos < editor.noteSelectionEnd.x)
 			{
-				int selectedChannel = selection.x;
-				int selectedPart = selection.y;
-
-				if (selectedPart < 5)
-				{
-					if (loadedPattern.rows[y].note[selectedChannel] != -1)
-						loadedPattern.rows[y].note[selectedChannel] += editor.transposeValue;
-				}
-
-				while (selectedPart < 5) // Make sure that the same note isn't transposed twice.
-				{
-					selectedPart++;
-					x++;
-				}
+				if (loadedPattern.channels[ch].data[y].note != -1)
+					loadedPattern.channels[ch].data[y].note += editor.transposeValue;
 			}
 		}
 	}
-	loadedSong.unsavedChanges = true;
-	*/
+
+	
 	return;
 }
 
@@ -541,31 +493,34 @@ void transposeNotes()
 
 void setNoteSamples()
 {
-	/*
-	for (int y = editor.noteSelectionStart.y; y <= editor.noteSelectionEnd.y; y++)
+
+	if (editor.playingSong) // Set the selected area to the playing position.
 	{
-		for (int x = editor.noteSelectionStart.x; x < editor.noteSelectionEnd.x; x++)
+		editor.noteSelectionStart.y = loadedSong.currentNote;
+		editor.noteSelectionEnd.y = loadedSong.currentNote;
+	}
+
+	// Create mouse selection frame.
+	int rows = int(editor.noteSelectionEnd.y + 1 - editor.noteSelectionStart.y);
+	int leftMostChannel = findFrameTileByPosition(editor.noteSelectionStart.x).x;
+	int rightMostChannel = findFrameTileByPosition(editor.noteSelectionEnd.x).x;
+
+
+	for (int ch = leftMostChannel; ch <= rightMostChannel; ch++)
+	{
+		for (int y = editor.noteSelectionStart.y; y <= editor.noteSelectionEnd.y; y++)
 		{
-			Vector2 selection = findFrameTileByPosition(x);
 
-			if (selection.y < 0)
-				continue;
-
-			if (selection.x != -1)
+			// Add any parts of the channel inside the selected area.
+			int notePos = ch * 11;
+			if (notePos + 4 >= editor.noteSelectionStart.x && notePos < editor.noteSelectionEnd.x)
 			{
-				int selectedChannel = selection.x;
-				int selectedPart = selection.y;
-
-				if (selectedPart < 5)
-				{
-					if (loadedPattern.rows[y].instrument[selectedChannel] != -1)
-						loadedPattern.rows[y].instrument[selectedChannel] = editor.selectedInstrument;
-				}
+				if (loadedPattern.channels[ch].data[y].note != -1)
+					loadedPattern.channels[ch].data[y].instrument = editor.selectedInstrument;
 			}
 		}
 	}
-	loadedSong.unsavedChanges = true;
-	*/
+
 
 	return;
 }

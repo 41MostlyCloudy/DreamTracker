@@ -1387,11 +1387,17 @@ void character_callback(GLFWwindow* window, unsigned int codepoint)
 
     if (editor.focusOnNotes) // Create notes
     {
+        if (loadedSong.currentNote < 0) // Out of pattern.
+            return;
+
         Vector2 notePos = findFrameTileByPosition(editor.noteSelectionStart.x);
         int selectedPart = notePos.y;
         int selectedChannel = notePos.x;
         
-        if (selectedPart < 0)
+        if (selectedPart < 0) // Out of pattern.
+            return;
+
+        if (loadedSong.currentNote >= loadedPattern.channels[selectedChannel].data.size()) // Out of pattern.
             return;
 
         if (selectedPart < 3 && selectedPart != -2) // Playing keys
@@ -1409,7 +1415,7 @@ void character_callback(GLFWwindow* window, unsigned int codepoint)
                 if (!screen.keyDown) // Play the note sound.
                 {
                     channels[selectedChannel].resetChannelEffects(true);
-                    StartNote(selectedChannel, editor.selectedInstrument, noteNum, 0);
+                    StartNote(selectedChannel, editor.selectedInstrument, noteNum);
                 }
                 loadedPattern.channels[selectedChannel].data[loadedSong.currentNote].note = noteNum;
                 loadedPattern.channels[selectedChannel].data[loadedSong.currentNote].instrument = editor.selectedInstrument;
@@ -1729,9 +1735,9 @@ void pressButton(GLFWwindow* window)
             {
                 if (loadedInstruments[editor.selectedInstrument].waveforms[wave].pcmFrames.size() < 1)
                 {
-                    loadedInstruments[editor.selectedInstrument].waveforms[wave].pcmFrames.assign(480 * 2, 0.0f);
+                    loadedInstruments[editor.selectedInstrument].waveforms[wave].pcmFrames.assign(16, 0.0f);
                     loadedInstruments[editor.selectedInstrument].waveforms[wave].loopStart = 0.0f;
-                    loadedInstruments[editor.selectedInstrument].waveforms[wave].loopEnd = 480 * 2;
+                    loadedInstruments[editor.selectedInstrument].waveforms[wave].loopEnd = 16;
                 }
             }
 
@@ -1739,7 +1745,6 @@ void pressButton(GLFWwindow* window)
 
             sampleDisplay.visible = true;
             sampleDisplay.drawing = false; // Stop sample drawing.
-            sampleDisplay.zoomed = false; // Reset zoom.
             sampleDisplay.selectedOperator = 0; // Select the first sample operator.
 
             loadedInstruments[editor.selectedInstrument].enabled = true;
@@ -1893,12 +1898,11 @@ void pressButton(GLFWwindow* window)
                         for (int wave = 0; wave < 4; wave++)
                         {
                             loadedInstruments[editor.selectedInstrument].waveforms[wave].pcmFrames.clear();
-                            loadedInstruments[editor.selectedInstrument].waveforms[wave].pcmFrames.assign(480 * 2, 0.0f);
+                            loadedInstruments[editor.selectedInstrument].waveforms[wave].pcmFrames.assign(16, 0.0f);
                             loadedInstruments[editor.selectedInstrument].waveforms[wave].loopStart = 0.0f;
-                            loadedInstruments[editor.selectedInstrument].waveforms[wave].loopEnd = 480 * 2;
+                            loadedInstruments[editor.selectedInstrument].waveforms[wave].loopEnd = 16;
                         }
                         sampleDisplay.drawing = false; // Stop sample drawing.
-                        sampleDisplay.zoomed = false; // Reset zoom.
                         sampleDisplay.selectedOperator = 0; // Select the first sample operator.
                     }
                     else // Delete sample.
@@ -1931,7 +1935,6 @@ void pressButton(GLFWwindow* window)
             {
                 editor.selectedInstrument = gui.hoveredTile.y - 2 + gui.instrumentListScroll;
                 sampleDisplay.drawing = false; // Stop sample drawing.
-                sampleDisplay.zoomed = false; // Reset zoom.
                 sampleDisplay.selectedOperator = 0; // Select the first sample operator.
             }
 
@@ -1994,34 +1997,20 @@ void pressButton(GLFWwindow* window)
             {
                 PatternIndexTable newFrame;
                 
-                for (int ch = 0; ch < 8; ch++) // Set each channel to use the first open pattern.
+                for (int ch = 0; ch < 8; ch++) // Set each channel to use the pattern number corresponding with the song pattern number.
                 {
-                    int lastFr = 0;
-                    for (int i = 0; i < loadedSong.patterns.size(); i++)
-                    {
-                        if (loadedSong.patterns[i].channelPatterns[i] > lastFr)
-                            lastFr = loadedSong.patterns[i].channelPatterns[i];
-                    }
-                    newFrame.channelPatterns[ch] = lastFr + 1;
+                    newFrame.channelPatterns[ch] = loadedSong.patternSequence[loadedSong.currentPattern];
 
-                    if (lastFr >= loadedSong.channelPatterns[ch].patterns.size())
+                    while (loadedSong.patternSequence[loadedSong.currentPattern] >= loadedSong.channelPatterns[ch].patterns.size())
                     {
                         RolledChannel newChPat;
                         loadedSong.channelPatterns[ch].patterns.emplace_back(newChPat);
-                    }
-
-                    for (int row = 0; row < loadedPattern.channels[ch].rows; row++)
-                    {
-                        loadedPattern.channels[ch].data[row].note = -1;
-                        loadedPattern.channels[ch].data[row].instrument = -1;
-                        loadedPattern.channels[ch].data[row].volume = -1;
-                        loadedPattern.channels[ch].data[row].effect = -1;
                     }
                 }
 
                 loadedSong.patterns.emplace_back(newFrame);
             }
-            saveCurrentPattern();
+            
             loadCurrentPattern();
             
             loadedSong.unsavedChanges = true;
@@ -2530,8 +2519,6 @@ void releaseButton()
 
     sampleDisplay.dragLoopStart = false;
     sampleDisplay.dragLoopEnd = false;
-    if (sampleDisplay.sampleSelectionEnd < sampleDisplay.sampleStartPos)
-        std::swap(sampleDisplay.sampleSelectionEnd, sampleDisplay.sampleStartPos);
 
 
 

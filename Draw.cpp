@@ -520,12 +520,13 @@ void  DrawTopUI()
 			gui.activeUI[43 + x][0].sprite = { 2, 3 };
 		}
 
-		DrawGUIText("(1-4): Operator Amplitude", 43, 68, 3, 3, 0);
-		DrawGUIText("(A): Increase Pitch", 43, 68, 4, 3, 0);
-		DrawGUIText("(B): Decrease Pitch", 43, 68, 5, 3, 0);
-		DrawGUIText("(C): Jump to Sample Point", 43, 68, 6, 3, 0);
-		DrawGUIText("(D): Delay Note", 43, 68, 7, 3, 0);
-		DrawGUIText("(E): Retrigger Note", 43, 68, 8, 3, 0);
+		DrawGUIText("(1-4): Increase Modulator", 43, 68, 3, 3, 0);
+		DrawGUIText("(5-8): Decrease Modulator", 43, 68, 4, 3, 0);
+		DrawGUIText("(A): Increase Pitch", 43, 68, 5, 3, 0);
+		DrawGUIText("(B): Decrease Pitch", 43, 68, 6, 3, 0);
+		DrawGUIText("(C): Jump to Sample Point", 43, 68, 7, 3, 0);
+		DrawGUIText("(D): Delay Note", 43, 68, 8, 3, 0);
+		DrawGUIText("(E): Retrigger Note", 43, 68, 9, 3, 0);
 
 
 		gui.activeUI[42][0].sprite = { 0, 3 };
@@ -2560,20 +2561,6 @@ void DrawFloatingWindow(FloatingWindow* wind)
 					gui.activeUI[int(wind->position.x) + 27][int(wind->position.y) + 38].sprite = { 18, 3 };
 					gui.activeUI[int(wind->position.x) + 27][int(wind->position.y) + 39].sprite = { 18, 4 };
 				}
-				if (sampleDisplay.zoomed) // Draw the zoom button.
-				{
-					gui.activeUI[int(wind->position.x) + 28][int(wind->position.y) + 38].sprite = { 30, 7 };
-					gui.activeUI[int(wind->position.x) + 28][int(wind->position.y) + 39].sprite = { 30, 8 };
-					gui.activeUI[int(wind->position.x) + 29][int(wind->position.y) + 38].sprite = { 31, 7 };
-					gui.activeUI[int(wind->position.x) + 29][int(wind->position.y) + 39].sprite = { 31, 8 };
-				}
-				else
-				{
-					gui.activeUI[int(wind->position.x) + 28][int(wind->position.y) + 38].sprite = { 28, 7 };
-					gui.activeUI[int(wind->position.x) + 28][int(wind->position.y) + 39].sprite = { 28, 8 };
-					gui.activeUI[int(wind->position.x) + 29][int(wind->position.y) + 38].sprite = { 29, 7 };
-					gui.activeUI[int(wind->position.x) + 29][int(wind->position.y) + 39].sprite = { 29, 8 };
-				}
 			}
 		}
 
@@ -2607,10 +2594,7 @@ void DrawFloatingWindow(FloatingWindow* wind)
 		}
 
 
-		// Loop button
-		//DrawGUIText("Periods:", wind->position.x + 1, wind->position.x + 9, wind->position.y + 8, 3, 0);
-		//DrawHorizontalSlider(int(wind->position.x + 9), int(wind->position.y + 8), float(loadedInstruments[editor.selectedSample].waveforms[sampleDisplay.selectedOperator].periods) / 16.0f);
-
+		
 		// Arpeggio
 		if (loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].useArp)
 		{
@@ -2623,36 +2607,23 @@ void DrawFloatingWindow(FloatingWindow* wind)
 			gui.activeUI[int(wind->position.x + 10)][int(wind->position.y + 8)].sprite = { 23, 6 };
 		}
 
-		gui.activeUI[int(wind->position.x + 2)][int(wind->position.y + 9)].sprite = { 5, 26 };
-		if (loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopType == 0)
-			DrawGUIText("NO LOOP", wind->position.x + 3, wind->position.x + 12, wind->position.y + 9, 4, -1);
-		else if (loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopType == 1)
-			DrawGUIText("LOOP", wind->position.x + 3, wind->position.x + 12, wind->position.y + 9, 4, -1);
-		else
-			DrawGUIText("BOUNCE", wind->position.x + 3, wind->position.x + 12, wind->position.y + 9, 4, -1);
-		gui.activeUI[int(wind->position.x + 12)][int(wind->position.y + 9)].sprite = { 6, 26 };
 
-
-
-
-
-		// ASDR
-		/*
-		DrawGUIText("Attack:", wind->position.x + 1, wind->position.x + 10, wind->position.y + 12, 3, 0);
-		DrawHorizontalSlider(int(wind->position.x + 9), int(wind->position.x + 17), int(wind->position.y + 12), loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].attack);
-		DrawGUIText("Sustain:", wind->position.x + 1, wind->position.x + 10, wind->position.y + 13, 3, 0);
-		if (loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].sustainForever)
-			gui.activeUI[int(wind->position.x + 8)][int(wind->position.y + 13)].sprite = { 5, 22 };
+		// Loop
+		if (loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loop)
+		{
+			DrawGUIText("Loop:", wind->position.x + 1, wind->position.x + 16, wind->position.y + 9, 3, 0);
+			gui.activeUI[int(wind->position.x + 6)][int(wind->position.y + 9)].sprite = { 24, 6 };
+		}
 		else
 		{
-			gui.activeUI[int(wind->position.x + 8)][int(wind->position.y + 13)].sprite = { 4, 22 };
-			DrawHorizontalSlider(int(wind->position.x + 9), int(wind->position.x + 17), int(wind->position.y + 13), loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].sustain);
+			DrawGUIText("Loop:", wind->position.x + 1, wind->position.x + 16, wind->position.y + 9, 2, 0);
+			gui.activeUI[int(wind->position.x + 6)][int(wind->position.y + 9)].sprite = { 23, 6 };
 		}
-		DrawGUIText("Decay:", wind->position.x + 1, wind->position.x + 10, wind->position.y + 14, 3, 0);
-		DrawHorizontalSlider(int(wind->position.x + 9), int(wind->position.x + 17), int(wind->position.y + 14), loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].decay);
-		DrawGUIText("Release:", wind->position.x + 1, wind->position.x + 10, wind->position.y + 15, 3, 0);
-		DrawHorizontalSlider(int(wind->position.x + 9), int(wind->position.x + 17), int(wind->position.y + 15), loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].release);
-		*/
+		
+
+
+
+
 
 		// Octave
 		DrawGUIText("Octave:", wind->position.x + 1, wind->position.x + 16, wind->position.y + 14, 3, 0);
@@ -2707,10 +2678,6 @@ void DrawFloatingWindow(FloatingWindow* wind)
 
 		
 
-		//gui.activeUI[int(wind->position.x + 8)][int(wind->position.y + 20)].sprite = { 5, 26 };
-		//DrawGUIText(std::to_string(12 - int(loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].lfo)), wind->position.x + 9, wind->position.x + 11, wind->position.y + 20, 4, -1);
-		//gui.activeUI[int(wind->position.x + 11)][int(wind->position.y + 20)].sprite = { 6, 26 };
-		// Continue note
 		
 
 
@@ -2802,18 +2769,7 @@ void DrawFloatingWindow(FloatingWindow* wind)
 		gui.activeUI[int(wind->position.x + 33)][int(wind->position.y + 25)].sprite = { 6, 26 };
 
 
-		//gui.scrollBars[5].topLeft.x = wind->position.x + 1;
-		//gui.scrollBars[5].topLeft.y = wind->position.y + 27;
 
-		
-
-		//if (sampleDisplay.offset >= sampleDisplay.pcmData.size() * 0.5f - (960 / sampleDisplay.zoomFactor))
-		//	sampleDisplay.offset = sampleDisplay.pcmData.size() * 0.5f - (960 / sampleDisplay.zoomFactor) - 1;
-		//if (sampleDisplay.offset < 0)
-		//	sampleDisplay.offset = 0;
-		
-
-		//DrawSampleDisplay();
 
 
 		if (sampleDisplay.displayType == 0) // Sample display
@@ -2866,57 +2822,6 @@ void DrawFloatingWindow(FloatingWindow* wind)
 			
 			gui.activeUI[int(wind->position.x + 15)][int(wind->position.y + 39)].sprite = { 6, 26 };
 		}
-	}
-	else if (wind->name == "Sample Selection")
-	{
-		std::string settingsText[8] = {
-			"CUT", "RESAMPLE", "VOLUME", "SET LOOP", "FADE OUT", "FADE IN", "COPY", "PASTE"
-		};
-		for (int i = 0; i < 8; i++)
-		{
-			DrawGUIText(settingsText[i], wind->position.x + 2, wind->position.x + 15, wind->position.y + 2 + i * 2, 4, -1);
-			gui.activeUI[int(wind->position.x + 1)][int(wind->position.y + 2 + i * 2)].sprite = { 5, 26 };
-			gui.activeUI[int(wind->position.x + 15)][int(wind->position.y + 2 + i * 2)].sprite = { 6, 26 };
-		}
-	}
-	else if (wind->name == "Resample Sample")
-	{
-		DrawGUIText("Fine-tune", wind->position.x + 2, wind->position.x + 12, wind->position.y + 2, 3, 0);
-		gui.activeUI[int(wind->position.x + 2)][int(wind->position.y + 3)].sprite = { 8, 3 };
-		gui.activeUI[int(wind->position.x + 3)][int(wind->position.y + 3)].sprite = { 9, 3 };
-		gui.activeUI[int(wind->position.x + 4)][int(wind->position.y + 3)].sprite = { 10, 3 };
-		DrawGUIText(std::to_string(sampleDisplay.resampleFineTune), wind->position.x + 6, wind->position.x + 16, wind->position.y + 3, 3, 0);
-		DrawGUIText("Semitones", wind->position.x + 2, wind->position.x + 12, wind->position.y + 4, 3, 0);
-		gui.activeUI[int(wind->position.x + 2)][int(wind->position.y + 5)].sprite = { 8, 3 };
-		gui.activeUI[int(wind->position.x + 3)][int(wind->position.y + 5)].sprite = { 9, 3 };
-		gui.activeUI[int(wind->position.x + 4)][int(wind->position.y + 5)].sprite = { 10, 3 };
-		DrawGUIText("C-4 to ", wind->position.x + 6, wind->position.x + 13, wind->position.y + 5, 3, 0);
-		DrawEDONote(sampleDisplay.resampleNote, wind->position.x + 13, wind->position.y + 5, 3, 0, -1, -1);
-		
-		float selectedFrameSize = abs(sampleDisplay.sampleSelectionEnd - sampleDisplay.sampleStartPos);
-		DrawGUIText(std::to_string(int(selectedFrameSize)) + " frames", wind->position.x + 2, wind->position.x + 20, wind->position.y + 7, 3, 0);
-		DrawGUIText("to ", wind->position.x + 2, wind->position.x + 20, wind->position.y + 8, 3, 0);
-
-		
-		selectedFrameSize *= sampleDisplay.resampleMultiplier;
-
-		DrawNum(selectedFrameSize, wind->position.x + 2, wind->position.x + 20, wind->position.y + 9, 4, 0, -1, 28);
-
-		DrawGUIText("APPLY", wind->position.x + 9, wind->position.x + 14, wind->position.y + 11, 4, -1);
-		gui.activeUI[int(wind->position.x + 8)][int(wind->position.y + 11)].sprite = { 5, 26 };
-		gui.activeUI[int(wind->position.x + 14)][int(wind->position.y + 11)].sprite = { 6, 26 };
-	}
-	else if (wind->name == "Sample Volume")
-	{
-		DrawGUIText("Volume", wind->position.x + 2, wind->position.x + 12, wind->position.y + 2, 4, 1);
-		gui.activeUI[int(wind->position.x + 2)][int(wind->position.y + 3)].sprite = { 8, 3 };
-		gui.activeUI[int(wind->position.x + 3)][int(wind->position.y + 3)].sprite = { 9, 3 };
-		gui.activeUI[int(wind->position.x + 4)][int(wind->position.y + 3)].sprite = { 10, 3 };
-		DrawGUIText(std::to_string(sampleDisplay.volumeMultiplier), wind->position.x + 6, wind->position.x + 16, wind->position.y + 3, 4, 1);
-
-		DrawGUIText("APPLY", wind->position.x + 9, wind->position.x + 14, wind->position.y + 5, 4, -1);
-		gui.activeUI[int(wind->position.x + 8)][int(wind->position.y + 5)].sprite = { 5, 26 };
-		gui.activeUI[int(wind->position.x + 14)][int(wind->position.y + 5)].sprite = { 6, 26 };
 	}
 	else if (wind->name == "Algorithms")
 	{

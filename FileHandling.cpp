@@ -629,14 +629,7 @@ void LoadSettings()
 void WriteInstrument(std::ofstream* instrumentFile, Instrument* instrument)
 {
 
-    uint8_t jumpPoints = instrument->jumpPoints.size();
-    instrumentFile->write((char*)&jumpPoints, 1);
-
-    for (int j = 0; j < jumpPoints; j++)
-    {
-        int point = instrument->jumpPoints[j];
-        instrumentFile->write((char*)&point, 4);
-    }
+    
 
     uint8_t opWaves = instrument->operatorMapping[3] * 64.0f + instrument->operatorMapping[2] * 16.0f + instrument->operatorMapping[1] * 4.0f + instrument->operatorMapping[0];
     instrumentFile->write((char*)&opWaves, 1);
@@ -708,6 +701,8 @@ void WriteInstrument(std::ofstream* instrumentFile, Instrument* instrument)
             for (int fr = 0; fr < frameCount; fr++)
             {
                 float scaledFrame = ((instrument->waveforms[j].pcmFrames[fr] * 128.0f) + 128.0f);
+                if (scaledFrame > 255.0f) scaledFrame = 255.0f;
+                else if (scaledFrame < 0.0f) scaledFrame = 0.0f;
                 uint8_t frameVal = uint8_t(scaledFrame);
                 instrumentFile->write((char*)&frameVal, 1);
             }
@@ -738,7 +733,7 @@ void WriteInstrument(std::ofstream* instrumentFile, Instrument* instrument)
 
 
 
-            waveVar = instrument->waveforms[j].waveType * 16.0f + instrument->waveforms[j].loopType;
+            waveVar = instrument->waveforms[j].waveType;
             instrumentFile->write((char*)&waveVar, 1);
 
             if (instrument->waveforms[j].offset > 0.9375f) instrument->waveforms[j].offset = 0.9375f;
@@ -753,7 +748,7 @@ void WriteInstrument(std::ofstream* instrumentFile, Instrument* instrument)
             // Boolean flags
 
 
-            waveVar = (int)instrument->waveforms[j].useArp * 64.0f + (int)instrument->waveforms[j].invertStereo * 32.0f + (int)instrument->waveforms[j].generateFromSines * 16.0f + (int)instrument->waveforms[j].reverseFrames * 8.0f + (int)instrument->waveforms[j].noSustain * 4.0f + (int)instrument->waveforms[j].pitchToNote * 2.0f + (int)instrument->waveforms[j].continueNote;
+            waveVar = (int)instrument->waveforms[j].loop * 128.0f + (int)instrument->waveforms[j].useArp * 64.0f + (int)instrument->waveforms[j].invertStereo * 32.0f + (int)instrument->waveforms[j].generateFromSines * 16.0f + (int)instrument->waveforms[j].reverseFrames * 8.0f + (int)instrument->waveforms[j].noSustain * 4.0f + (int)instrument->waveforms[j].pitchToNote * 2.0f + (int)instrument->waveforms[j].continueNote;
             instrumentFile->write((char*)&waveVar, 1);
 
             //std::cout << " Write: " << int(waveVar);
@@ -811,17 +806,7 @@ Instrument ReadInstrument(std::ifstream* instrumentFile)
     newInstrument.enabled = true;
 
 
-    // Jump points
-    uint8_t jumpPoints;
-    instrumentFile->read((char*)&jumpPoints, 1);
-    newInstrument.jumpPoints.clear();
 
-    for (int j = 0; j < jumpPoints; j++)
-    {
-        int newJumpPoint = 0;
-        instrumentFile->read((char*)&newJumpPoint, 4);
-        newInstrument.jumpPoints.emplace_back(newJumpPoint);
-    }
 
 
     uint8_t opWaves;
@@ -947,10 +932,8 @@ Instrument ReadInstrument(std::ifstream* instrumentFile)
 
 
             instrumentFile->read((char*)&readVar, 1);
-            var1 = int(readVar / 16.0f);
-            var2 = readVar - var1 * 16.0f;
-            newInstrument.waveforms[j].waveType = var1;
-            newInstrument.waveforms[j].loopType = var2;
+            newInstrument.waveforms[j].waveType = readVar;
+
             instrumentFile->read((char*)&readVar, 1);
             var1 = int(readVar / 16.0f);
             var2 = readVar - var1 * 16.0f;
@@ -977,6 +960,7 @@ Instrument ReadInstrument(std::ifstream* instrumentFile)
             int varB = int(readVar - (varH * 128.0f + varG * 64.0f + varF * 32.0f + varE * 16.0f + varD * 8.0f + varC * 4.0f)) / 2.0f;
             int varA = int(readVar - (varH * 128.0f + varG * 64.0f + varF * 32.0f + varE * 16.0f + varD * 8.0f + varC * 4.0f + varB * 2.0f));
             
+            newInstrument.waveforms[j].loop = (bool)varH;
             newInstrument.waveforms[j].useArp = (bool)varG;
             newInstrument.waveforms[j].invertStereo = (bool)varF;
             newInstrument.waveforms[j].generateFromSines = (bool)varE;
@@ -994,8 +978,6 @@ Instrument ReadInstrument(std::ifstream* instrumentFile)
             instrumentFile->read((char*)&loopEnd, 4);
             newInstrument.waveforms[j].loopEnd = loopEnd;
 
-            if (newInstrument.waveforms[j].loopType > 2)
-                newInstrument.waveforms[j].loopType = 2;
 
             newInstrument.waveforms[j].clampLoopPoints();
 
@@ -1013,10 +995,10 @@ Instrument ReadInstrument(std::ifstream* instrumentFile)
             newInstrument.waveforms[j].envelopeLength = int(envelopeVar);
 
             instrumentFile->read((char*)&envelopeVar, 1);
-            newInstrument.waveforms[j].envelopeScale = float(int(envelopeVar)) * 0.25f;
+            newInstrument.waveforms[j].envelopeStartAmp = float(envelopeVar) / 255.0f;
 
             instrumentFile->read((char*)&envelopeVar, 1);
-            newInstrument.waveforms[j].envelopeStartAmp = float(envelopeVar) / 255.0f;
+            newInstrument.waveforms[j].envelopeScale = float(int(envelopeVar)) * 0.25f;
 
             uint8_t numOfEnvPoints;
             instrumentFile->read((char*)&numOfEnvPoints, 1);
@@ -1041,10 +1023,10 @@ Instrument ReadInstrument(std::ifstream* instrumentFile)
 
     for (int i = 0; i < 4; i++) // Fill empty waves.
     {
-        if (newInstrument.waveforms[i].pcmFrames.size() < 128)
+        if (newInstrument.waveforms[i].pcmFrames.size() < 16)
         {
-            newInstrument.waveforms[i].pcmFrames.resize(183);
-            std::fill(newInstrument.waveforms[i].pcmFrames.begin(), newInstrument.waveforms[i].pcmFrames.begin() + 183, 0.0f);
+            newInstrument.waveforms[i].pcmFrames.resize(16);
+            std::fill(newInstrument.waveforms[i].pcmFrames.begin(), newInstrument.waveforms[i].pcmFrames.begin() + 16, 0.0f);
         }
     }
 

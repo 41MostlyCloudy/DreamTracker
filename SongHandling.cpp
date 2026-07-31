@@ -10,13 +10,13 @@
 
 void SetUpAudioEngine();
 
-void StartNote(int channel, int sampleNumber, float pitch, int startFrame);
+void StartNote(int channel, int sampleNumber, float pitch);
 
 void PlayChannels(float* pOutputF32, ma_uint32 frameCount, ma_uint32 frameOffset);
 
 void updateSongOnBeat();
 
-int updateChannelOnBeat(int ch);
+void updateChannelOnBeat(int ch);
 
 void RecordSong();
 
@@ -83,43 +83,21 @@ float wrapReadPos(float readPos, int channel, int wave)
 
     int loopStart = loadedInstruments[inst].waveforms[wave].loopStart;
     int loopEnd = loadedInstruments[inst].waveforms[wave].loopEnd;
-    int loopType = loadedInstruments[inst].waveforms[wave].loopType;
+    bool loop = loadedInstruments[inst].waveforms[wave].loop;
 
-    if (loopType == 0) // No loop.
+    if (!loop) // No loop.
     {
         if (readPos >= loopEnd)
             readPos = loopEnd - 1;
         else if (readPos < loopStart)
             readPos = loopStart;
     }
-    else if (loopType == 1) // Forward loop.
+    else // Loop.
     {
         while (readPos < loopStart)
             readPos += (loopEnd - loopStart);
         while (readPos >= loopEnd)
             readPos -= (loopEnd - loopStart);
-    }
-    else // Bounce loop.
-    {
-        bool wrapped = false;
-        while (!wrapped)
-        {
-            if (readPos < loopStart)
-            {
-                readPos -= loopStart;
-                readPos *= -1.0f;
-                readPos += loopStart;
-            }
-            else if (readPos >= loopEnd)
-            {
-                readPos -= loopEnd;
-                readPos *= -1.0f;
-                readPos += loopEnd;
-                readPos--;
-            }
-            else
-                wrapped = true;
-        }
     }
 
     return readPos;
@@ -136,7 +114,7 @@ void readModulator(float* pOutputF32, ma_uint64 frameCount, int channel, int op,
 
 
     // Make sure that the frame reading position is inside the sample.
-    channels[channel].waveforms[op].wrapReadPos(loadedInstruments[channels[channel].instrument].waveforms[mappedWave].loopType,
+    channels[channel].waveforms[op].wrapReadPos(loadedInstruments[channels[channel].instrument].waveforms[mappedWave].loop,
         loadedInstruments[channels[channel].instrument].waveforms[mappedWave].loopStart, loadedInstruments[channels[channel].instrument].waveforms[mappedWave].loopEnd);
 
 
@@ -245,9 +223,9 @@ void readModulator(float* pOutputF32, ma_uint64 frameCount, int channel, int op,
         notePitch *= lfoMultiplier;
 
         if (notePitch > 12.0f) notePitch = 12.0f;
-        if (notePitch < -12.0f) notePitch = -12.0f;
+        if (notePitch < 0.0f) notePitch = 0.0f;
 
-
+        //continue;
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////// Read frame data.
         float sampleRateIndex = int(channels[channel].waveforms[op].sampleReadPos / channels[channel].waveforms[op].sampleRate) * channels[channel].waveforms[op].sampleRate;
@@ -264,9 +242,16 @@ void readModulator(float* pOutputF32, ma_uint64 frameCount, int channel, int op,
         float frameVol = loadedInstruments[channels[channel].instrument].waveforms[mappedWave].pcmFrames[index1] * (1.0f - t) + loadedInstruments[channels[channel].instrument].waveforms[mappedWave].pcmFrames[index2] * t;
 
 
-        float frameVolStereo[2] = { frameVol, frameVol };
+        float frameVolStereo = frameVol;
+
+        
 
         channels[channel].waveforms[op].sampleReadPos += notePitch;
+
+        
+
+        
+        
 
         /////////////////////////////////////// Read interpolation volume.
         if (channels[channel].waveforms[op].interpTimer > 0.0f)
@@ -301,8 +286,7 @@ void readModulator(float* pOutputF32, ma_uint64 frameCount, int channel, int op,
             float interpFrameVol = loadedInstruments[lastInstrument].waveforms[mappedWave].pcmFrames[interpIndex1] * (1.0f - interpT) + loadedInstruments[lastInstrument].waveforms[mappedWave].pcmFrames[interpIndex2] * interpT;
 
 
-            frameVolStereo[0] = interpFrameVol * iTime + frameVolStereo[0] * (1.0f - iTime);
-            frameVolStereo[1] = interpFrameVol * iTime + frameVolStereo[1] * (1.0f - iTime);
+            frameVolStereo = interpFrameVol * iTime + frameVolStereo * (1.0f - iTime);
 
             channels[channel].waveforms[op].interpLastReadPos += notePitch;
             channels[channel].waveforms[op].interpTimer -= 0.01f;
@@ -313,223 +297,220 @@ void readModulator(float* pOutputF32, ma_uint64 frameCount, int channel, int op,
         //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         
-
-
         
 
         for (int modNum = 0; modNum < 4; modNum++)
         {
             if (mods[modNum] != nullptr) // Modulate
             {
-                for (int stereoOffset = 0; stereoOffset < 2; stereoOffset++)
+                float modStrength = loadedInstruments[channels[channel].instrument].modScale[modNum];
+
+                if (loadedInstruments[channels[channel].instrument].modulationTypes[modNum] == 0) // FM
                 {
-                    if (loadedInstruments[channels[channel].instrument].modulationTypes[modNum] == 0) // FM
+                    channels[channel].waveforms[op].sampleReadPos += mods[modNum][i * 2] * modStrength * 1.0f;
+                }
+                else if (loadedInstruments[channels[channel].instrument].modulationTypes[modNum] == 1) // AM
+                {
+                    // AM
+                    frameVolStereo *= abs(mods[modNum][i * 2]) * modStrength * 2.0f;
+                }
+                else if (loadedInstruments[channels[channel].instrument].modulationTypes[modNum] == 2) // Apply delay.
+                {
+                    int sampleLen = loadedInstruments[channels[channel].instrument].waveforms[mappedWave].pcmFrames.size();
+
+                    float delayIndex = channels[channel].waveforms[op].sampleReadPos + mods[modNum][i * 2] * 100.0f * modStrength * 2.0f;
+
+                    delayIndex = wrapReadPos(delayIndex, channel, mappedWave);
+
+                    ma_uint32 dIndex1 = delayIndex;
+                    ma_uint32 dIndex2 = delayIndex + 1;
+
+                    float t2 = delayIndex - dIndex1;  // Fractional part
+                    if (dIndex2 >= sampleLen)
+                        dIndex2 = 0;
+
+                    frameVolStereo += loadedInstruments[channels[channel].instrument].waveforms[mappedWave].pcmFrames[dIndex1] * (1.0f - t2) + loadedInstruments[channels[channel].instrument].waveforms[mappedWave].pcmFrames[dIndex2] * t2;
+                }
+                else if (loadedInstruments[channels[channel].instrument].modulationTypes[modNum] == 6) // Apply fuzz.
+                {
+                    float drySignal = frameVolStereo;
+
+                    float modFuzz = abs(mods[modNum][i * 2]) * 1.0f;
+
+                    if (modFuzz > 1.0f) modFuzz = 1.0f; // Cap fuzz level.
+                    modFuzz *= 16.0f;
+                    frameVolStereo *= 1.0f + modFuzz;
+
+
+                    if (loadedInstruments[channels[channel].instrument].waveforms[mappedWave].fuzzType == 0) // Clip
                     {
-                        channels[channel].waveforms[op].sampleReadPos += mods[modNum][i * 2 + stereoOffset] * loadedInstruments[channels[channel].instrument].modScale[modNum] * 1.0f;
+                        // Clamp the volume to a normal range.
+                        if (frameVolStereo > 1.0f) frameVolStereo = 1.0f;
+                        else if (frameVolStereo < -1.0f) frameVolStereo = -1.0f;
+
                     }
-                    else if (loadedInstruments[channels[channel].instrument].modulationTypes[modNum] == 1) // AM
+                    else if (loadedInstruments[channels[channel].instrument].waveforms[mappedWave].fuzzType == 1) // Fold
                     {
-                        // AM
-                        frameVolStereo[stereoOffset] *= abs(mods[modNum][i * 2 + stereoOffset]) * loadedInstruments[channels[channel].instrument].modScale[modNum] * 2.0f;
-                    }
-                    else if (loadedInstruments[channels[channel].instrument].modulationTypes[modNum] == 2) // Apply delay.
-                    {
-                        int sampleLen = loadedInstruments[channels[channel].instrument].waveforms[mappedWave].pcmFrames.size();
-
-                        float delayIndex = channels[channel].waveforms[op].sampleReadPos + mods[modNum][i * 2 + stereoOffset] * 100.0f * loadedInstruments[channels[channel].instrument].modScale[modNum] * 2.0f;
-
-                        delayIndex = wrapReadPos(delayIndex, channel, mappedWave);
-
-                        ma_uint32 dIndex1 = delayIndex;
-                        ma_uint32 dIndex2 = delayIndex + 1;
-
-                        float t2 = delayIndex - dIndex1;  // Fractional part
-                        if (dIndex2 >= sampleLen)
-                            dIndex2 = 0;
-
-                        frameVolStereo[stereoOffset] += loadedInstruments[channels[channel].instrument].waveforms[mappedWave].pcmFrames[dIndex1] * (1.0f - t2) + loadedInstruments[channels[channel].instrument].waveforms[mappedWave].pcmFrames[dIndex2] * t2;
-                    }
-                    else if (loadedInstruments[channels[channel].instrument].modulationTypes[modNum] == 6) // Apply fuzz.
-                    {
-                        float drySignal = frameVolStereo[stereoOffset];
-
-                        float modFuzz = abs(mods[modNum][i * 2 + stereoOffset]) * 1.0f;
-
-                        if (modFuzz > 1.0f) modFuzz = 1.0f; // Cap fuzz level.
-                        modFuzz *= 16.0f;
-                        frameVolStereo[stereoOffset] *= 1.0f + modFuzz;
-
-                        float effect = loadedInstruments[channels[channel].instrument].modScale[modNum];
-
-                        if (loadedInstruments[channels[channel].instrument].waveforms[mappedWave].fuzzType == 0) // Clip
+                        bool waveFolded = false;
+                        while (!waveFolded)
                         {
-                            // Clamp the volume to a normal range.
-                            if (frameVolStereo[stereoOffset] > 1.0f) frameVolStereo[stereoOffset] = 1.0f;
-                            else if (frameVolStereo[stereoOffset] < -1.0f) frameVolStereo[stereoOffset] = -1.0f;
+                            if (frameVolStereo <= 1.0f && frameVolStereo >= -1.0f)
+                                waveFolded = true;
 
-                        }
-                        else if (loadedInstruments[channels[channel].instrument].waveforms[mappedWave].fuzzType == 1) // Fold
-                        {
-                            bool waveFolded = false;
-                            while (!waveFolded)
+                            if (frameVolStereo > 1.0f)
                             {
-                                if (frameVolStereo[stereoOffset] <= 1.0f && frameVolStereo[stereoOffset] >= -1.0f)
-                                    waveFolded = true;
-
-                                if (frameVolStereo[stereoOffset] > 1.0f)
-                                {
-                                    frameVolStereo[stereoOffset] -= 1.0f;
-                                    frameVolStereo[stereoOffset] *= -1.0f;
-                                    frameVolStereo[stereoOffset] += 1.0f;
-                                }
-                                else if (frameVolStereo[stereoOffset] < -1.0f)
-                                {
-                                    frameVolStereo[stereoOffset] += 1.0f;
-                                    frameVolStereo[stereoOffset] *= -1.0f;
-                                    frameVolStereo[stereoOffset] -= 1.0f;
-                                }
+                                frameVolStereo -= 1.0f;
+                                frameVolStereo *= -1.0f;
+                                frameVolStereo += 1.0f;
+                            }
+                            else if (frameVolStereo < -1.0f)
+                            {
+                                frameVolStereo += 1.0f;
+                                frameVolStereo *= -1.0f;
+                                frameVolStereo -= 1.0f;
                             }
                         }
-                        else // Ring
+                    }
+                    else // Ring
+                    {
+                        bool waveFolded = false;
+                        while (!waveFolded)
                         {
-                            bool waveFolded = false;
-                            while (!waveFolded)
-                            {
-                                if (frameVolStereo[stereoOffset] <= 1.0f && frameVolStereo[stereoOffset] >= -1.0f)
-                                    waveFolded = true;
+                            if (frameVolStereo <= 1.0f && frameVolStereo >= -1.0f)
+                                waveFolded = true;
 
-                                if (frameVolStereo[stereoOffset] > 1.0f)
-                                {
-                                    frameVolStereo[stereoOffset] -= 1.0f;
-                                    frameVolStereo[stereoOffset] *= -1.0f;
-                                    frameVolStereo[stereoOffset] += 1.0f;
-                                }
-                                else if (frameVolStereo[stereoOffset] < 0.0f)
-                                {
-                                    frameVolStereo[stereoOffset] *= -1.0f;
-                                }
+                            if (frameVolStereo > 1.0f)
+                            {
+                                frameVolStereo -= 1.0f;
+                                frameVolStereo *= -1.0f;
+                                frameVolStereo += 1.0f;
+                            }
+                            else if (frameVolStereo < 0.0f)
+                            {
+                                frameVolStereo *= -1.0f;
                             }
                         }
-
-                        frameVolStereo[stereoOffset] /= (1.0f + modFuzz * 0.125f);
-
-                        frameVolStereo[stereoOffset] = frameVolStereo[stereoOffset] * effect + drySignal * (1.0f - effect);
-
                     }
-                    else if (loadedInstruments[channels[channel].instrument].modulationTypes[modNum] == 7) // Apply PM.
-                    {
-                        float mapPos = ((mods[modNum][i * 2 + stereoOffset] * mods[modNum][i * 2 + stereoOffset] * mods[modNum][i * 2 + stereoOffset] * loadedInstruments[channels[channel].instrument].modScale[modNum]) + 0.5f) * 4.0f;
-                        while (mapPos > 1.0f) mapPos--;
-                        while (mapPos < 0.0f) mapPos++;
-                        int sampleLen = loadedInstruments[channels[channel].instrument].waveforms[mappedWave].pcmFrames.size() - 1;
-                        mapPos *= sampleLen;
-                        channels[channel].waveforms[op].sampleReadPos = mapPos;
 
-                    }
-                    else if (loadedInstruments[channels[channel].instrument].modulationTypes[modNum] == 8) // Apply bit depth.
-                    {
-                        float bitDepth = abs(mods[modNum][i * 2 + stereoOffset] * loadedInstruments[channels[channel].instrument].modScale[modNum]) * 256.0f;
-                        if (bitDepth > 256.0f) bitDepth = 256.0f;
-                        else if (bitDepth < 1.0f) bitDepth = 1.0f;
-                        frameVolStereo[stereoOffset] *= 256.0f;
-                        frameVolStereo[stereoOffset] = int(frameVolStereo[stereoOffset] / bitDepth) * bitDepth;
-                        frameVolStereo[stereoOffset] /= 256.0f;
-                    }
-                    else if (loadedInstruments[channels[channel].instrument].modulationTypes[modNum] == 9) // Apply envelope speed.
-                    {
-                        float maxSpeed = 16.0f;
-                        float speed = abs(mods[modNum][i * 2 + stereoOffset] * loadedInstruments[channels[channel].instrument].modScale[modNum]) * maxSpeed;
-                        if (speed > maxSpeed) speed = maxSpeed;
-                        else if (speed < 0.0f) speed = 0.0f;
-                        channels[channel].waveforms[op].envelopeSpeed = speed;
-                    }
-                    else if (loadedInstruments[channels[channel].instrument].modulationTypes[modNum] == 10) // Apply high-pass filter.
-                    {
-                        channels[channel].waveforms[op].highPass = abs(mods[modNum][i * 2 + stereoOffset] * loadedInstruments[channels[channel].instrument].modScale[modNum]) * 2.0f;
-                        
-                        if (channels[channel].waveforms[op].highPass > 2.0f) channels[channel].waveforms[op].highPass = 2.0f;
-                        else if (channels[channel].waveforms[op].highPass < 0.0f) channels[channel].waveforms[op].highPass = 0.0f;
+                    frameVolStereo /= (1.0f + modFuzz * 0.125f);
 
-                        float cutoffFreq = channels[channel].waveforms[op].highPass * 2000.0f;
-                        if (cutoffFreq <= 0)
-                            cutoffFreq = 1.0f;
-                        float RC = 1.0f / (2.0f * 3.14159265f * cutoffFreq);
-                        channels[channel].waveforms[op].alphaHigh = RC / (RC + (1.0f / 48000.0f));
+                    frameVolStereo = frameVolStereo * modStrength + drySignal * (1.0f - modStrength);
 
+                }
+                else if (loadedInstruments[channels[channel].instrument].modulationTypes[modNum] == 7) // Apply PM.
+                {
+                    float mapPos = ((mods[modNum][i * 2] * mods[modNum][i * 2] * mods[modNum][i * 2] * modStrength) + 0.5f) * 4.0f;
+                    while (mapPos > 1.0f) mapPos--;
+                    while (mapPos < 0.0f) mapPos++;
+                    int sampleLen = loadedInstruments[channels[channel].instrument].waveforms[mappedWave].pcmFrames.size() - 1;
+                    mapPos *= sampleLen;
+                    channels[channel].waveforms[op].sampleReadPos = mapPos;
 
-                        // High-pass filter
-                        float alpha2 = channels[channel].waveforms[op].alphaHigh;
+                }
+                else if (loadedInstruments[channels[channel].instrument].modulationTypes[modNum] == 8) // Apply bit depth.
+                {
+                    float bitDepth = abs(mods[modNum][i * 2] * modStrength) * 256.0f;
+                    if (bitDepth > 256.0f) bitDepth = 256.0f;
+                    else if (bitDepth < 1.0f) bitDepth = 1.0f;
+                    frameVolStereo *= 256.0f;
+                    frameVolStereo = int(frameVolStereo / bitDepth) * bitDepth;
+                    frameVolStereo /= 256.0f;
+                }
+                else if (loadedInstruments[channels[channel].instrument].modulationTypes[modNum] == 9) // Apply envelope speed.
+                {
+                    float maxSpeed = 16.0f;
+                    float speed = abs(mods[modNum][i * 2] * modStrength) * maxSpeed;
+                    if (speed > maxSpeed) speed = maxSpeed;
+                    else if (speed < 0.0f) speed = 0.0f;
+                    channels[channel].waveforms[op].envelopeSpeed = speed;
+                }
+                else if (loadedInstruments[channels[channel].instrument].modulationTypes[modNum] == 10) // Apply high-pass filter.
+                {
+                    channels[channel].waveforms[op].highPass = abs(mods[modNum][i * 2] * modStrength) * 2.0f;
 
-                        float oldInputL = 0;
-                        float oldInputR = 0;
+                    if (channels[channel].waveforms[op].highPass > 2.0f) channels[channel].waveforms[op].highPass = 2.0f;
+                    else if (channels[channel].waveforms[op].highPass < 0.0f) channels[channel].waveforms[op].highPass = 0.0f;
 
-                        float frame = frameVolStereo[stereoOffset] * 0.5f;
+                    float cutoffFreq = channels[channel].waveforms[op].highPass * 2000.0f;
+                    if (cutoffFreq <= 0)
+                        cutoffFreq = 1.0f;
+                    float RC = 1.0f / (2.0f * 3.14159265f * cutoffFreq);
+                    channels[channel].waveforms[op].alphaHigh = RC / (RC + (1.0f / 48000.0f));
 
 
+                    // High-pass filter
+                    float alpha2 = channels[channel].waveforms[op].alphaHigh;
+
+                    float oldInputL = 0;
+                    float oldInputR = 0;
+
+                    float frame = frameVolStereo * 0.5f;
 
 
-                        // High-pass
-                        oldInputL = frame;
-                        frame = alpha2 * (channels[channel].waveforms[op].prevHighPassSample[stereoOffset] + frame - channels[channel].waveforms[op].prevHighPassSampleI[stereoOffset]);
-                        channels[channel].waveforms[op].prevHighPassSampleI[stereoOffset] = oldInputL;
-                        channels[channel].waveforms[op].prevHighPassSample[stereoOffset] = frame;
 
 
-                        frameVolStereo[stereoOffset] = frame;
-                    }
-                    else if (loadedInstruments[channels[channel].instrument].modulationTypes[modNum] == 11) // Apply sample rate.
-                    {
-                        channels[channel].waveforms[op].sampleRate = (abs(mods[modNum][i * 2 + stereoOffset] * loadedInstruments[channels[channel].instrument].modScale[modNum]) * 32.0f) + 1.0f;
-
-                        if (channels[channel].waveforms[op].sampleRate > 32.0f) channels[channel].waveforms[op].sampleRate = 32.0f;
-                        else if (channels[channel].waveforms[op].sampleRate < 1.0f) channels[channel].waveforms[op].sampleRate = 1.0f;
+                    // High-pass
+                    oldInputL = frame;
+                    frame = alpha2 * (channels[channel].waveforms[op].prevHighPassSample + frame - channels[channel].waveforms[op].prevHighPassSampleI);
+                    channels[channel].waveforms[op].prevHighPassSampleI = oldInputL;
+                    channels[channel].waveforms[op].prevHighPassSample = frame;
 
 
-                    }
-                    else if (loadedInstruments[channels[channel].instrument].modulationTypes[modNum] > 2) // Apply low-pass.
-                    {
-                        int modType = loadedInstruments[channels[channel].instrument].modulationTypes[modNum];
-                        float lpCutoff; // Cutoff frequency in Hz
+                    frameVolStereo = frame;
+                }
+                else if (loadedInstruments[channels[channel].instrument].modulationTypes[modNum] == 11) // Apply sample rate.
+                {
+                    channels[channel].waveforms[op].sampleRate = (abs(mods[modNum][i * 2] * modStrength) * 32.0f) + 1.0f;
 
-                        // Set initial parameters
-                        if (modType == 4)
-                            lpCutoff = loadedInstruments[channels[channel].instrument].modScale[modNum] * 4000.0f * abs(notePitch);
-                        else if (modType == 5)
-                            lpCutoff = (abs(mods[modNum][i * 2 + stereoOffset])) * 4000.0f * abs(notePitch) * loadedInstruments[channels[channel].instrument].modScale[modNum] * 2.0f;
-                        else
-                            lpCutoff = (abs(mods[modNum][i * 2 + stereoOffset])) * 4000.0f * abs(notePitch);
+                    if (channels[channel].waveforms[op].sampleRate > 32.0f) channels[channel].waveforms[op].sampleRate = 32.0f;
+                    else if (channels[channel].waveforms[op].sampleRate < 1.0f) channels[channel].waveforms[op].sampleRate = 1.0f;
 
-                        
-                        
-                        if (lpCutoff < 200.0f) lpCutoff = 200.0f;
-                        else if (lpCutoff > 24000.0f) lpCutoff = 24000.0f;
 
-                        // Update parameters.
-                        // Normalize cutoff frequency (0 to 1, where 1 = Nyquist)
-                        float f = 2.0f * lpCutoff / 48000.0f;
+                }
+                else if (loadedInstruments[channels[channel].instrument].modulationTypes[modNum] > 2) // Apply low-pass.
+                {
+                    int modType = loadedInstruments[channels[channel].instrument].modulationTypes[modNum];
+                    float lpCutoff; // Cutoff frequency in Hz
 
-                        // Clamp to valid range
-                        if (f > 0.99) f = 0.99;
+                    // Set initial parameters
+                    if (modType == 4)
+                        lpCutoff = modStrength * 4000.0f * (notePitch);
+                    else if (modType == 5)
+                        lpCutoff = (abs(mods[modNum][i * 2])) * 4000.0f * (notePitch)*modStrength * 2.0f;
+                    else
+                        lpCutoff = (abs(mods[modNum][i * 2])) * 4000.0f * (notePitch);
 
-                        // Calculate feedback amount from resonance
-                        float resonance;
-                        if (modType == 3)
-                            resonance = loadedInstruments[channels[channel].instrument].modScale[modNum] * 2.0f;
-                        else if (modType == 5)
-                            resonance = loadedInstruments[channels[channel].instrument].modScale[modNum] * 2.0f * loadedInstruments[channels[channel].instrument].modScale[modNum];
-                        else
-                            resonance = abs(mods[modNum][i * 2 + stereoOffset]) * 2.0f;
 
-                        float q = 1.0 - f;
-                        float fb = resonance + resonance / (1.0f - f);
 
-                        // Process audio samples
-                        frameVolStereo[stereoOffset] = channels[channel].waveforms[op].process(frameVol, f, fb, q);
-                    }
+                    if (lpCutoff < 200.0f) lpCutoff = 200.0f;
+                    else if (lpCutoff > 24000.0f) lpCutoff = 24000.0f;
+
+                    // Update parameters.
+                    // Normalize cutoff frequency (0 to 1, where 1 = Nyquist)
+                    float f = 2.0f * lpCutoff / 48000.0f;
+
+                    // Clamp to valid range
+                    if (f > 0.99) f = 0.99;
+
+                    // Calculate feedback amount from resonance
+                    float resonance;
+                    if (modType == 3)
+                        resonance = modStrength * 2.0f;
+                    else if (modType == 5)
+                        resonance = modStrength * 2.0f * modStrength;
+                    else
+                        resonance = abs(mods[modNum][i * 2]) * 2.0f;
+
+                    float q = 1.0 - f;
+                    float fb = resonance + resonance / (1.0f - f);
+
+                    // Process audio samples
+                    frameVolStereo = channels[channel].waveforms[op].process(frameVol, f, fb, q);
                 }
             }
         }
         
+
 
 
         // The added fuzz level.
@@ -539,80 +520,75 @@ void readModulator(float* pOutputF32, ma_uint64 frameCount, int channel, int op,
         float fuzz = fuzzLevel * 16.0f;
 
         
-        for (int j = 0; j < 2; j++)
+        frameVolStereo *= channels[channel].waveforms[op].volume;
+        frameVolStereo *= channels[channel].waveforms[op].glideVolume;
+
+        // Add the fuzz effect.
+        if (fuzzLevel > 0)
         {
-            frameVolStereo[j] *= channels[channel].waveforms[op].volume;
-            frameVolStereo[j] *= channels[channel].waveforms[op].glideVolume;
+            frameVolStereo *= 1.0f + fuzz;
 
-            // Add the fuzz effect.
-            if (fuzzLevel > 0)
+            if (loadedInstruments[channels[channel].instrument].waveforms[mappedWave].fuzzType == 0) // Clip
             {
-                frameVolStereo[j] *= 1.0f + fuzz;
-
-                if (loadedInstruments[channels[channel].instrument].waveforms[mappedWave].fuzzType == 0) // Clip
-                {
-                    // Clamp the volume to a normal range.
-                    if (frameVolStereo[j] > 1.0f) frameVolStereo[j] = 1.0f;
-                    else if (frameVolStereo[j] < -1.0f) frameVolStereo[j] = -1.0f;
-                }
-                else if (loadedInstruments[channels[channel].instrument].waveforms[mappedWave].fuzzType == 1) // Fold
-                {
-                    bool waveFolded = false;
-                    while (!waveFolded)
-                    {
-                        if (frameVolStereo[j] <= 1.0f && frameVolStereo[j] >= -1.0f)
-                            waveFolded = true;
-
-                        if (frameVolStereo[j] > 1.0f)
-                        {
-                            frameVolStereo[j] -= 1.0f;
-                            frameVolStereo[j] *= -1.0f;
-                            frameVolStereo[j] += 1.0f;
-                        }
-                        else if (frameVolStereo[j] < -1.0f)
-                        {
-                            frameVolStereo[j] += 1.0f;
-                            frameVolStereo[j] *= -1.0f;
-                            frameVolStereo[j] -= 1.0f;
-                        }
-                    }
-                }
-                else // Ring
-                {
-                    bool waveFolded = false;
-                    while (!waveFolded)
-                    {
-                        if (frameVolStereo[j] <= 1.0f && frameVolStereo[j] >= -1.0f)
-                            waveFolded = true;
-
-                        if (frameVolStereo[j] > 1.0f)
-                        {
-                            frameVolStereo[j] -= 1.0f;
-                            frameVolStereo[j] *= -1.0f;
-                            frameVolStereo[j] += 1.0f;
-                        }
-                        else if (frameVolStereo[j] < 0.0f)
-                        {
-                            frameVolStereo[j] *= -1.0f;
-                        }
-                    }
-                }
-
-                frameVolStereo[j] /= (1.0f + fuzz * 0.125f);
+                // Clamp the volume to a normal range.
+                if (frameVolStereo > 1.0f) frameVolStereo = 1.0f;
+                else if (frameVolStereo < -1.0f) frameVolStereo = -1.0f;
             }
+            else if (loadedInstruments[channels[channel].instrument].waveforms[mappedWave].fuzzType == 1) // Fold
+            {
+                bool waveFolded = false;
+                while (!waveFolded)
+                {
+                    if (frameVolStereo <= 1.0f && frameVolStereo >= -1.0f)
+                        waveFolded = true;
+
+                    if (frameVolStereo > 1.0f)
+                    {
+                        frameVolStereo -= 1.0f;
+                        frameVolStereo *= -1.0f;
+                        frameVolStereo += 1.0f;
+                    }
+                    else if (frameVolStereo < -1.0f)
+                    {
+                        frameVolStereo += 1.0f;
+                        frameVolStereo *= -1.0f;
+                        frameVolStereo -= 1.0f;
+                    }
+                }
+            }
+            else // Ring
+            {
+                bool waveFolded = false;
+                while (!waveFolded)
+                {
+                    if (frameVolStereo <= 1.0f && frameVolStereo >= -1.0f)
+                        waveFolded = true;
+
+                    if (frameVolStereo > 1.0f)
+                    {
+                        frameVolStereo -= 1.0f;
+                        frameVolStereo *= -1.0f;
+                        frameVolStereo += 1.0f;
+                    }
+                    else if (frameVolStereo < 0.0f)
+                    {
+                        frameVolStereo *= -1.0f;
+                    }
+                }
+            }
+
+            frameVolStereo /= (1.0f + fuzz * 0.125f);
         }
         
 
-        
 
 
-
-
-        pOutputF32[i * 2] += frameVolStereo[0];
+        pOutputF32[i * 2] += frameVolStereo;
         if (loadedInstruments[channels[channel].instrument].waveforms[mappedWave].invertStereo)
-            pOutputF32[i * 2 + 1] -= frameVolStereo[1];
+            pOutputF32[i * 2 + 1] -= frameVolStereo;
         else
-            pOutputF32[i * 2 + 1] += frameVolStereo[1];
+            pOutputF32[i * 2 + 1] += frameVolStereo;
+
 
 
         ////////////////////////////////////////////
@@ -628,15 +604,12 @@ void readModulator(float* pOutputF32, ma_uint64 frameCount, int channel, int op,
         // Pitch Slide
         if (channels[channel].pitchSlide != 0)
         {
-            if (channels[channel].waveforms[op].pitch > 0.0f)
-                channels[channel].waveforms[op].glideDest += channels[channel].pitchSlide * 0.00001f * 120.0f;
-            else
-                channels[channel].waveforms[op].glideDest -= channels[channel].pitchSlide * 0.00001f * 120.0f;
+            channels[channel].waveforms[op].glideDest += channels[channel].pitchSlide * 0.00001f * 120.0f;
 
             if (channels[channel].waveforms[op].glideDest > 8.0f)
                 channels[channel].waveforms[op].glideDest = 8.0f;
-            else if (channels[channel].waveforms[op].glideDest < -8.0f)
-                channels[channel].waveforms[op].glideDest = -8.0f;
+            else if (channels[channel].waveforms[op].glideDest < 0.0f)
+                channels[channel].waveforms[op].glideDest = 0.0f;
         }
 
 
@@ -644,7 +617,7 @@ void readModulator(float* pOutputF32, ma_uint64 frameCount, int channel, int op,
 
 
         /////////////////////////////////////////////// End of sample.
-        channels[channel].waveforms[op].wrapReadPos(loadedInstruments[channels[channel].instrument].waveforms[mappedWave].loopType,
+        channels[channel].waveforms[op].wrapReadPos(loadedInstruments[channels[channel].instrument].waveforms[mappedWave].loop,
             loadedInstruments[channels[channel].instrument].waveforms[mappedWave].loopStart, loadedInstruments[channels[channel].instrument].waveforms[mappedWave].loopEnd);
         
     }
@@ -713,29 +686,6 @@ void applySubtractiveFilters(float* pOutputF32, ma_uint64 frameCount, int channe
 
 
         /////////////////////////////////////////////// Update note parameters.
-
-        // Volume Slide
-        if (channels[channel].volumeSlide != 0)
-        {
-            channels[channel].volume += channels[channel].volumeSlide * 0.0001f * 120.0f;
-            if (channels[channel].volume > 1) channels[channel].volume = 1;
-            else if (channels[channel].volume < 0) channels[channel].volume = 0;
-        }
-
-        // Jump Slide
-        if (channels[channel].jumpSlide != 0)
-        {
-            channels[channel].jumpPoint += channels[channel].jumpSlide * 0.005f;
-            if (channels[channel].jumpPoint < 0.0f) channels[channel].jumpPoint = 0.0f;
-        }
-
-        // Retrigger Slide
-        if (channels[channel].retriggerSlide != 0)
-        {
-            channels[channel].retrigger += channels[channel].retriggerSlide * 0.01f;
-            if (channels[channel].retrigger < 1.0f) channels[channel].retrigger = 1.0f;
-            else if (channels[channel].retrigger > 255.0f) channels[channel].retrigger = 255.0f;
-        }
     }
 
 
@@ -1073,7 +1023,6 @@ void readWithFMAlgorithm(float* pOutputF32, ma_uint64 frameCount, int channel, m
 void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount)
 {
     std::lock_guard<std::shared_mutex> lock(mtx);
-    //std::shared_lock<std::shared_mutex> lock(mtx);
 
     
     float* pOutputF32 = (float*)pOutput;
@@ -1113,7 +1062,7 @@ void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uin
         PlayChannels(pOutputF32, framesToRead, frameOffset);
         
     }
-    else // if (sampleDisplay.playingSample)
+    else
     {
         ma_uint32 frameOffset = 0;
         // For each channel, read out frames of data in 4000 frame groups.
@@ -1139,7 +1088,7 @@ void PlayChannels(float* pOutputF32, ma_uint32 frameCount, ma_uint32 frameOffset
                 channels[channel].arpTimer += frameCount;
 
                 float arpAmount = 48000.0f * (120.0f / loadedSong.bpm) * ((loadedInstruments[channels[channel].instrument].arpSpeed + 0.0625f)) / 8.0f;
-                //float arpAmount = loadedInstruments[channels[channel].instrument].arpSpeed * 16.0f;
+
 
                 if (channels[channel].arpTimer > arpAmount)
                 {
@@ -1162,7 +1111,7 @@ void PlayChannels(float* pOutputF32, ma_uint32 frameCount, ma_uint32 frameOffset
                     readWithFMAlgorithm(pOutputF32, ma_uint64(frameCount - framesOver), channel, frameOffset);
                     ma_uint64 delayedFrameOffset = ma_uint64(frameOffset + frameCount - framesOver);
                     channels[channel].patternOffset = 0;
-                    StartNote(channel, channels[channel].offsetInstrument, channels[channel].offsetNote, channels[channel].jumpPoint);
+                    StartNote(channel, channels[channel].offsetInstrument, channels[channel].offsetNote);
                     readWithFMAlgorithm(pOutputF32, framesOver, channel, delayedFrameOffset);
                 }
                 else
@@ -1177,7 +1126,7 @@ void PlayChannels(float* pOutputF32, ma_uint32 frameCount, ma_uint32 frameOffset
                 if (channels[channel].retriggerTimer > retrigAmount)
                 {
                     channels[channel].retriggerTimer -= retrigAmount;
-                    StartNote(channel, channels[channel].offsetInstrument, channels[channel].offsetNote, channels[channel].jumpPoint);
+                    StartNote(channel, channels[channel].offsetInstrument, channels[channel].offsetNote);
                     
                 }
                 readWithFMAlgorithm(pOutputF32, frameCount, channel, frameOffset);
@@ -1189,9 +1138,6 @@ void PlayChannels(float* pOutputF32, ma_uint32 frameCount, ma_uint32 frameOffset
 
     return;
 }
-
-
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
 
@@ -1231,7 +1177,7 @@ void SetUpAudioEngine()
 
 
 
-void StartNote(int channel, int sampleNumber, float pitch, int startFrame)
+void StartNote(int channel, int sampleNumber, float pitch)
 {
 
     channels[channel].offsetNote = pitch;
@@ -1316,20 +1262,11 @@ void StartNote(int channel, int sampleNumber, float pitch, int startFrame)
         // Set frame reading position.
         if (!loadedInstruments[sampleNumber].waveforms[mappedWave].continueNote || instrumentChanged)
         {
-            //if (channels[channel].waveforms[wave].reverseRead)
-            //    channels[channel].waveforms[wave].sampleReadPos = loadedInstruments[sampleNumber].waveforms[mappedWave].pcmFrames.size() - 1;
-            //else
-            channels[channel].waveforms[wave].sampleReadPos = 0;
-
-
-            //if (channels[channel].waveforms[wave].reverseRead)
-            //    channels[channel].waveforms[wave].sampleReadPos -= startFrame;
-            //else
-            channels[channel].waveforms[wave].sampleReadPos += startFrame;
+            channels[channel].waveforms[wave].sampleReadPos = channels[channel].waveforms[wave].jumpPoint;
 
 
             // Make sure that the sample reading position is inside the sample.
-            channels[channel].waveforms[wave].wrapReadPos(loadedInstruments[sampleNumber].waveforms[mappedWave].loopType,
+            channels[channel].waveforms[wave].wrapReadPos(loadedInstruments[sampleNumber].waveforms[mappedWave].loop,
                 loadedInstruments[channels[channel].instrument].waveforms[mappedWave].loopStart, loadedInstruments[channels[channel].instrument].waveforms[mappedWave].loopEnd);
         }
 
@@ -1390,8 +1327,7 @@ void updateSongOnBeat()
 
 
 
-    int frameToJumpTo = -1; // The frame to jump to if jumping to a frame this cycle. This allows all effects to be played before a frame jump happens.
-
+    
 
     for (int ch = 0; ch < 8;ch++)
     {
@@ -1442,115 +1378,30 @@ void updateSongOnBeat()
     }
 
 
-    // Delay note.
-    /*
-    if (channels[channel].frameOffset > 0)
-    {
-
-        if (resampleIndex > channels[channel].jumpPoint + channels[channel].frameOffset)
-        {
-            std::cout << "a";
-            channels[channel].frameOffset = 0;
-
-
-            StartSample(channel, channels[channel].offsetInstrument, channels[channel].offsetNote, channels[channel].jumpPoint);
-            //lastFrameReadPos = int(channels[channel].waveforms[op].frameReadPos);
-            //float reaBetweenFrames = channels[channel].waveforms[op].frameReadPos - lastFrameReadPos;
-            //channels[channel].waveforms[op].frameReadPos = channels[channel].jumpPoint;
-            //channels[channel].waveforms[op].frameReadPos = channels[channel].jumpPoint + reaBetweenFrames;
-            //if (channels[channel].waveforms[op].frameReadPos > loadedInstruments[channels[channel].instrument].waveforms[waveForm].pcmFrames.size())
-            //    channels[channel].waveforms[op].frameReadPos = loadedInstruments[channels[channel].instrument].waveforms[waveForm].pcmFrames.size() - 1;
-
-            //nextFrameReadPos = int(channels[channel].waveforms[op].frameReadPos) + 1.0f;
-            resampleIndex = channels[channel].waveforms[op].frameReadPos;
-        }
-        /*
-        channels[channel].frameOffset -= frameCount;
-        int framesLeft = -channels[channel].frameOffset;
-
-        if (framesLeft > 0) // Start the new note.
-        {
-            if (channelInitialized[channel])
-                readWithFMAlgorithm(pOutputF32, frameCount - framesLeft, channel, frameOffset);
-            frameOffset += frameCount - framesLeft;
-            StartSample(channel, channels[channel].offsetInstrument, channels[channel].offsetNote, channels[channel].offsetPos);
-            readWithFMAlgorithm(pOutputF32, framesLeft, channel, frameOffset);
-        }
-        else if (channelInitialized[channel])
-            readWithFMAlgorithm(pOutputF32, frameCount, channel, frameOffset);
-        
-    }*/
+    
 
 
     // Read note data an display notes.
     for (int ch = 0; ch < 8; ch++)
     {
-        int newFrame = updateChannelOnBeat(ch);
-        if (newFrame != -1)
-            frameToJumpTo = newFrame;
+        updateChannelOnBeat(ch);
     }
 
-    /*
-    for (int ch = 0; ch < 8; ch++) // Play notes.
-    {
-        if (loadedSong.currentNote % 4 == 0)
-            StartSample(ch, 0, 32);
-    }*/
-
-    if (frameToJumpTo > -1)
-    {
-        if (frameToJumpTo >= loadedSong.patternSequence.size())
-            frameToJumpTo = loadedSong.patternSequence.size() - 1;
-        loadedSong.currentPattern = frameToJumpTo;
-        loadedSong.currentNote = 0;
-
-        loadCurrentPattern();
-
-        // Reset frame values.
-        loadedSong.timeInNote = 0.0f;
-        loadedSong.timeInSong = 0.0f;
-        gui.patternScroll = 0;
-
-
-        for (int ch2 = 0; ch2 < 8; ch2++)
-        {
-            loadedSong.noteChannelIndex[ch2] = 0;
-            loadedSong.volumeChannelIndex[ch2] = 0;
-            loadedSong.effectChannelIndex[ch2] = 0;
-            loadedSong.toNextChannelNote[ch2] = 0;
-            loadedSong.toNextChannelVolume[ch2] = 0;
-            loadedSong.toNextChannelEffect[ch2] = 0;
-        }
-    }
+    
 
     return;
 }
 
 
 
-int updateChannelOnBeat(int ch)
+void updateChannelOnBeat(int ch)
 {
-    int frameToJumpTo = -1;
-
-    //bool restartFrame = false;
-
-
-
-
-    
-
-
 
     // Find distance to first note, volume and effect.
     int noteIndex = loadedSong.noteChannelIndex[ch];
     int volumeIndex = loadedSong.volumeChannelIndex[ch];
     int effectIndex = loadedSong.effectChannelIndex[ch];
 
-
-
-
-    
-    
 
 
 
@@ -1565,12 +1416,6 @@ int updateChannelOnBeat(int ch)
         loadedSong.toNextChannelEffect[ch] = loadedSong.channelPatterns[ch].patterns[loadedSong.patterns[loadedSong.patternSequence[loadedSong.currentPattern]].channelPatterns[ch]].effects[0];
         loadedSong.effectChannelIndex[ch]++;
         effectIndex++;
-
-        
-        //int patternLength = loadedSong.patterns[loadedSong.patternSequence[loadedSong.currentPattern]].rows;
-
-        //if (loadedSong.currentNote >= patternLength)
-        //    loadedSong.currentNote = 0;
     }
 
 
@@ -1618,8 +1463,7 @@ int updateChannelOnBeat(int ch)
 
 
 
-    ma_uint64 sampleStartOffset = 0;
-
+    
 
     if (loadedSong.toNextChannelEffect[ch] < 0) // Read next effect.
     {
@@ -1634,42 +1478,27 @@ int updateChannelOnBeat(int ch)
             int effectVal = effect % 16;
 
 
-            if (effectType < 5 && effectType > 0) // Set operator volume. (1st param = operator, 2nd param = volume)
-            {
-
-                for (int i = 0; i < 4; i++) // Apply the effect to all operators mapped to this wave.
-                {
-                    int mappedWave = loadedInstruments[channels[ch].instrument].operatorMapping[i];
-                    if (mappedWave == effectType - 1)
-                        channels[ch].waveforms[i].volume = float(effectVal) / 15.0f;
-                }
-            }
+            if (effectType < 5 && effectType > 0 - 1) // Operator volume slide up.
+                channels[ch].waveforms[effectType].volumeSlide = float(effectVal) / 1000.0f;
+            if (effectType < 9 && effectType > 4) // Operator volume slide down.
+                channels[ch].waveforms[effectType - 5].volumeSlide = float(effectVal) / -1000.0f;
             else if (effectType == 10) // Increase pitch.
                 channels[ch].pitchSlide = float(effectVal) / 100.0f;
             else if (effectType == 11) // Decrease pitch.
                 channels[ch].pitchSlide = float(effectVal) / -100.0f;
             else if (effectType == 12) // Sample jump
             {
-                if (effectVal < loadedInstruments[channels[ch].instrument].jumpPoints.size())
+                for (int wave = 0; wave < 4; wave++)
                 {
-                    effectVal = loadedInstruments[channels[ch].instrument].jumpPoints.size() - effectVal - 1;
-
-                    for (int wave = 0; wave < 4; wave++)
-                    {
-                        int mappedWave = loadedInstruments[channels[ch].instrument].operatorMapping[wave];
-                        channels[ch].waveforms[wave].sampleReadPos = loadedInstruments[channels[ch].instrument].jumpPoints[effectVal];
-                        channels[ch].waveforms[wave].wrapReadPos(loadedInstruments[channels[ch].instrument].waveforms[mappedWave].loopType,
-                            loadedInstruments[channels[ch].instrument].waveforms[mappedWave].loopStart, loadedInstruments[channels[ch].instrument].waveforms[mappedWave].loopEnd);
-                        sampleStartOffset = channels[ch].waveforms[wave].sampleReadPos;
-                        channels[ch].jumpPoint = sampleStartOffset;
-                    }
+                    int sampleLen = loadedInstruments[channels[ch].instrument].waveforms[wave].pcmFrames.size();
+                    channels[ch].waveforms[wave].jumpPoint = int(float(sampleLen) * (float(effectVal) / 16.0f));
+                    channels[ch].waveforms[wave].sampleReadPos = channels[ch].waveforms[wave].jumpPoint;
                 }
             }
             else if (effectType == 13) // Delay note.
             {
                 float fInBeat = (60000.0f / (loadedSong.bpm * 4.0f)) * 48.0f;
                 channels[ch].patternOffset = fInBeat * (float(effectVal) / 16.0f);
-                //std::cout << "  " << channels[ch].frameOffset;
             }
             else if (effectType == 14) // Retrigger.
             {
@@ -1724,17 +1553,11 @@ int updateChannelOnBeat(int ch)
             if (note == 255) // Stop note.
             {
                 channels[ch].noteStopped = true;
-                /*
-                for (int wave = 0; wave < 4; wave++)
-                {
-                    channels[ch].waveforms[wave].envelopePos = loadedInstruments[channels[ch].instrument].waveforms[wave].attack + loadedInstruments[channels[ch].instrument].waveforms[wave].sustain * 2.0f;
-                }*/
             }
             else
             {
                 channels[ch].offsetNote = note;
                 channels[ch].offsetInstrument = instrument;
-                channels[ch].offsetPos = sampleStartOffset;
                 channels[ch].retriggerTimer = 0;
 
                 for (int wave = 0; wave < 4; wave++)
@@ -1746,31 +1569,15 @@ int updateChannelOnBeat(int ch)
                 channels[ch].patternOffset += int(randVal);
 
                 if (channels[ch].patternOffset == 0) // Start offset note.
-                    StartNote(ch, instrument, note, sampleStartOffset);
+                    StartNote(ch, instrument, note);
             }
         }
     }
 
 
 
-    
 
-
-
-    /*
-    if (restartFrame)
-    {
-        loadedSong.noteChannelIndex[ch] = 0;
-        loadedSong.volumeChannelIndex[ch] = 0;
-        loadedSong.effectChannelIndex[ch] = 0;
-        loadedSong.toNextChannelNote[ch] = 0;
-        loadedSong.toNextChannelVolume[ch] = 0;
-        loadedSong.toNextChannelEffect[ch] = 0;
-
-        updateChannelOnBeat(ch);
-    }*/
-
-    return frameToJumpTo;
+    return;
 }
 
 
@@ -1783,7 +1590,6 @@ void RecordSong()
     while (loadedSong.patternSequence[loadedSong.currentPattern] >= loadedSong.patterns.size()) // Create a new frame when changed to one not yet used.
     {
         PatternIndexTable newFrame;
-        //newFrame.beatsPerMeasure = loadedPattern.beatsPerMeasure;
         loadedSong.patterns.emplace_back(newFrame);
     }
     loadedSong.currentPattern = 0;
@@ -1865,14 +1671,6 @@ void StartOrStopSong()
 {
 
 
-    /*
-    if (editor.recordingSong && !editor.playingSong) // Set up recording.
-    {
-        std::string fileName = "Export/" + loadedSong.songName + ".wav";
-        const char* name = &fileName[0];
-        ma_encoder_init_file(name, &encoderConfig, &encoder);
-    }*/
-
     editor.playingSong = !editor.playingSong;
     loadedSong.bpm = loadedSong.startingBPM;
 
@@ -1884,7 +1682,11 @@ void StartOrStopSong()
         channels[ch].playing = false;
     }
 
-    loadedSong.currentNote = -1;
+    if (editor.playingSong)
+        loadedSong.currentNote = -1;
+    else
+        loadedSong.currentNote = 0;
+
     loadedSong.timeInNote = (60000.0f / (loadedSong.bpm * 4.0f));
     loadedSong.timeInSong = 0.0f;
     for (int ch = 0; ch < 8; ch++)
@@ -1953,37 +1755,16 @@ void DrawSampleDisplay()
     float loopStartPos = float(loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopStart) / float(loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames.size());
     float loopEndPos = float(loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopEnd) / float(loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames.size());
     float startPos = float(sampleDisplay.sampleStartPos) / float(loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames.size());
-    float selectionEndPos = float(sampleDisplay.sampleSelectionEnd) / float(loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames.size());
 
 
 
-    if (sampleDisplay.zoomed)
-    {
-        float zoomStart = float(sampleDisplay.zoomStart) / float(loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames.size());
-        float zoomEnd = float(sampleDisplay.zoomEnd) / float(loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames.size());
-        float zoomScale = (zoomEnd - zoomStart);
-
-        loopStartPos -= zoomStart;
-        loopStartPos /= zoomScale;
-
-        loopEndPos -= zoomStart;
-        loopEndPos /= zoomScale;
-
-        startPos -= zoomStart;
-        startPos /= zoomScale;
-
-        selectionEndPos -= zoomStart;
-        selectionEndPos /= zoomScale;
-    }
 
     loopStartPos *= 528.0f;
     loopEndPos *= 528.0f;
     startPos *= 528.0f;
-    selectionEndPos *= 528.0f;
 
 
-    if (selectionEndPos < startPos)
-        std::swap(startPos, selectionEndPos);
+
 
 
     if (loopStartPos > 527)
@@ -2001,11 +1782,6 @@ void DrawSampleDisplay()
     else if (startPos < 0)
         startPos = 0;
 
-    if (selectionEndPos > 527)
-        selectionEndPos = 527;
-    else if (selectionEndPos < 0)
-        selectionEndPos = 0;
-
     
 
 
@@ -2014,7 +1790,7 @@ void DrawSampleDisplay()
 
         float brightness = 1.0f;
 
-        if (loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopType > 0)
+        if (loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loop)
         {
             if (x > loopStartPos && x < loopEndPos)
                 brightness *= 0.25f;
@@ -2032,29 +1808,17 @@ void DrawSampleDisplay()
             sampleDisplay.pixelData[x + 528 * y].g = gui.uiColors[4] * 255.0f;
             sampleDisplay.pixelData[x + 528 * y].b = gui.uiColors[5] * 255.0f;
 
-            if (x > startPos && x < selectionEndPos)
+            if (lighten)
             {
-                if (lighten)
-                {
-                    sampleDisplay.pixelData[x + 528 * y].r *= 0.8f;
-                    sampleDisplay.pixelData[x + 528 * y].g *= 0.8f;
-                    sampleDisplay.pixelData[x + 528 * y].b *= 0.8f;
-                }
+                sampleDisplay.pixelData[x + 528 * y].r *= 0.5f;
+                sampleDisplay.pixelData[x + 528 * y].g *= 0.5f;
+                sampleDisplay.pixelData[x + 528 * y].b *= 0.5f;
             }
             else
             {
-                if (lighten)
-                {
-                    sampleDisplay.pixelData[x + 528 * y].r *= 0.5f;
-                    sampleDisplay.pixelData[x + 528 * y].g *= 0.5f;
-                    sampleDisplay.pixelData[x + 528 * y].b *= 0.5f;
-                }
-                else
-                {
-                    sampleDisplay.pixelData[x + 528 * y].r *= 0.25f;
-                    sampleDisplay.pixelData[x + 528 * y].g *= 0.25f;
-                    sampleDisplay.pixelData[x + 528 * y].b *= 0.25f;
-                }
+                sampleDisplay.pixelData[x + 528 * y].r *= 0.25f;
+                sampleDisplay.pixelData[x + 528 * y].g *= 0.25f;
+                sampleDisplay.pixelData[x + 528 * y].b *= 0.25f;
             }
         }
         for (int y = 192 - 16; y < 192; y++)
@@ -2062,10 +1826,6 @@ void DrawSampleDisplay()
             sampleDisplay.pixelData[x + 528 * y].r = gui.uiColors[3] * 255.0f;
             sampleDisplay.pixelData[x + 528 * y].g = gui.uiColors[4] * 255.0f;
             sampleDisplay.pixelData[x + 528 * y].b = gui.uiColors[5] * 255.0f;
-        }
-        for (int y = 192 - 16 + 4; y < 192 - 4; y++)
-        {
-            sampleDisplay.pixelData[x + 528 * y] = { 100, 100, 0 };
         }
         for (int y = 0; y < 16; y++)
         {
@@ -2075,7 +1835,7 @@ void DrawSampleDisplay()
         }
         for (int y = 4; y < 16 - 4; y++)
         {
-            if (loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopType != 0)
+            if (loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loop)
             {
                 if (x > float(loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopStart) * (528.0f / loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames.size()) && x < float(loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopEnd) * (528.0f / loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames.size()))
                 {
@@ -2088,7 +1848,7 @@ void DrawSampleDisplay()
     }
 
 
-
+    
 
     if (loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames.size() > 0)
     {
@@ -2101,15 +1861,7 @@ void DrawSampleDisplay()
             int frameIndex = (float(x) / 528.0f) * (((loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames.size())));
 
             
-            if (sampleDisplay.zoomed)
-            {
-                float zoomStart = sampleDisplay.zoomStart;
-                float zoomEnd = sampleDisplay.zoomEnd;
-                float zoomScale = (zoomEnd - zoomStart) / loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames.size();
 
-                frameIndex *= zoomScale;
-                frameIndex += zoomStart;
-            }
 
 
             if (frameIndex >= loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames.size())
@@ -2126,7 +1878,7 @@ void DrawSampleDisplay()
 
             float brightness = 127.0f;
 
-            if (loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopType > 0)
+            if (loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loop)
             {
                 if (x > loopStartPos && x < loopEndPos)
                     brightness *= 0.5f;
@@ -2159,27 +1911,10 @@ void DrawSampleDisplay()
         }
 
 
-        // Draw jump points.
-        for (int i = 0; i < loadedInstruments[editor.selectedInstrument].jumpPoints.size(); i++)
-        {
-            int samplePos = (loadedInstruments[editor.selectedInstrument].jumpPoints[i]) * (528.0f / loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].pcmFrames.size());
-
-            for (int y = 0; y < 16; y++)
-            {
-                for (int x = samplePos - abs(y * 0.5); x < samplePos + abs(y * 0.5) + 1; x++)
-                {
-                    if (x > 0 && x < 528)
-                        sampleDisplay.pixelData[x + 528 * (y + 175)] = { 255, 255, 0 };
-                }
-            }
-            for (int y = 0; y < 175; y++)
-            {
-                sampleDisplay.pixelData[samplePos + 528 * y] = { 255, 255, 0 };
-            }
-        }
+        
 
         // Draw loop points.
-        if (loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loopType > 0)
+        if (loadedInstruments[editor.selectedInstrument].waveforms[sampleDisplay.selectedOperator].loop)
         {
             for (int y = 0; y < 16; y++)
             {
@@ -2226,20 +1961,10 @@ void DrawSampleDisplay()
                     sampleDisplay.pixelData[x + 528 * (15 - y)] = { 255, 255, 255 };
                 }
             }
-
-            for (int x = selectionEndPos - abs(y * 0.5); x < selectionEndPos + abs(y * 0.5) + 1; x++)
-            {
-                if (x > 0 && x < 528)
-                {
-                    sampleDisplay.pixelData[x + 528 * (y + 175)] = { 255, 255, 255 };
-                    sampleDisplay.pixelData[x + 528 * (15 - y)] = { 255, 255, 255 };
-                }
-            }
         }
         for (int y = 0; y < 192; y++)
         {
             sampleDisplay.pixelData[int(startPos) + 528 * y] = { 255, 255, 255 };
-            sampleDisplay.pixelData[int(selectionEndPos) + 528 * y] = { 255, 255, 255 };
         }
     }
     else
@@ -2309,10 +2034,6 @@ void DrawEnvelopeDisplay()
             sampleDisplay.pixelData[x + 528 * y].r = gui.uiColors[3] * 255.0f;
             sampleDisplay.pixelData[x + 528 * y].g = gui.uiColors[4] * 255.0f;
             sampleDisplay.pixelData[x + 528 * y].b = gui.uiColors[5] * 255.0f;
-        }
-        for (int y = 192 - 16 + 4; y < 192 - 4; y++)
-        {
-            sampleDisplay.pixelData[x + 528 * y] = { 100, 100, 0 };
         }
         for (int y = 0; y < 32; y++)
         {
@@ -2390,7 +2111,7 @@ void DrawEnvelopeDisplay()
 
 void GenerateAdditiveWave(Instrument* instrument, int op)
 {
-    //std::cout << "< ";
+    
     if (!instrument->enabled) // Create a new sample.
     {
         instrument->enabled = true;
@@ -2440,26 +2161,6 @@ void GenerateAdditiveWave(Instrument* instrument, int op)
                 }
             }
         }
-
-
-        //loadedSamples[editor.selectedSample].waveforms[sampleDisplay.selectedOperator].pcmFrames.data()
-
-        //float vol = 0;
-
-        //float index = float(x) / (float(16) * 1.0f);
-        //float index2 = index + 1;
-        //while (index2 >= noiseFrames.size())
-        //    index2 -= noiseFrames.size();
-
-        //float interp = index - int(index);
-
-        //float interpVol = noiseFrames[index] * (1.0f - interp) + noiseFrames[index2] * interp;
-
-        //interpVol *= frequencies[frequency] * 0.1f;
-
-        //vol += interpVol;
-
-        //inputWave[x] += vol;
     }
     else
     {
@@ -2475,7 +2176,7 @@ void GenerateAdditiveWave(Instrument* instrument, int op)
 
             // C - C# - D - D# - E - F - F# - G - G# - A - A# - B - C
 
-            // *= ((12 + 7) / 12)
+
 
             instrument->waveforms[op].pcmFrames.clear();
             instrument->waveforms[op].pcmFrames.assign(framesToWrite, 0.0f);
@@ -2483,7 +2184,7 @@ void GenerateAdditiveWave(Instrument* instrument, int op)
             float waveSize = 48000.0f / 261.625f;
             waveSize *= 2.0f;
 
-            //std::cout << "  " << waveSize;
+
 
             float freqs[11] = {
                 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f
@@ -2511,7 +2212,7 @@ void GenerateAdditiveWave(Instrument* instrument, int op)
             for (int ch = 0; ch < 8; ch++)
             {
                 for (int op = 0; op < 4; op++)
-                    channels[ch].waveforms[op].sampleReadPos = 0;
+                    channels[ch].waveforms[op].sampleReadPos = 0.0f;
             }
 
             return;
@@ -2569,7 +2270,7 @@ void GenerateAdditiveWave(Instrument* instrument, int op)
         }
 
         float waveTotal = pow(7, fact7) * pow(5, fact5) * pow(3, fact3) * pow(2, fact2);
-        if (waveTotal < 840.0f * 8.0f) waveTotal = 840.0f * 8.0f;
+
         waveTotal /= 840.0f;
         waveTotal *= 48000.0f;
         waveTotal /= 261.625f;
@@ -2588,8 +2289,8 @@ void GenerateAdditiveWave(Instrument* instrument, int op)
         {
             instrument->waveforms[op].pcmFrames.clear();
 
-            for (int fr = 0; fr < 480; fr++)
-                instrument->waveforms[op].pcmFrames.emplace_back(instrument->waveforms[op].offset);
+            instrument->waveforms[op].pcmFrames.clear();
+            instrument->waveforms[op].pcmFrames.assign(16, 0.0f);
         }
         else
         {
@@ -2609,7 +2310,6 @@ void GenerateAdditiveWave(Instrument* instrument, int op)
                 float waveSize = ((freqSizes[freq] / 840.0f) * 48000.0f) / 261.625f;
                 waveSize *= 2.0f;
 
-                //std::cout << "  " << waveSize;
 
                 if (instrument->waveforms[op].frequencies[freq] != 0)
                     ConstructWave(instrument, op, instrument->waveforms[op].waveType, instrument->waveforms[op].frequencies, framesToWrite, waveSize, freq, instrument->waveforms[op].pcmFrames.data());
@@ -2626,8 +2326,7 @@ void GenerateAdditiveWave(Instrument* instrument, int op)
 
 
     
-    instrument->waveforms[op].loopStart = 0;
-    instrument->waveforms[op].loopEnd = instrument->waveforms[op].pcmFrames.size();
+    
 
     if (instrument->waveforms[op].reverseFrames)
         std::reverse(instrument->waveforms[op].pcmFrames.begin(), instrument->waveforms[op].pcmFrames.end());
@@ -2640,8 +2339,75 @@ void GenerateAdditiveWave(Instrument* instrument, int op)
     for (int ch = 0; ch < 8; ch++)
     {
         for (int op = 0; op < 4; op++)
-            channels[ch].waveforms[op].sampleReadPos = 0;
+            channels[ch].waveforms[op].sampleReadPos = 0.0f;
     }
+
+
+
+
+    int len = instrument->waveforms[op].pcmFrames.size();
+
+    
+
+    // Duty cycle
+    float duty = instrument->waveforms[op].dutyCycle; // Length of left size.
+
+    if (duty != 0.5f)
+    {
+        // Stretch left side.
+        std::vector <float> newFr;
+
+        for (int fr = 0; fr < len * duty; fr++)
+        {
+            int pos = (fr / duty) / 2.0f;
+            float posF = (float(fr) / duty) / 2.0f;
+            float interp = posF - pos;
+
+            float amp;
+            if (fr == len - 1)
+                amp = instrument->waveforms[op].pcmFrames[pos] * (1.0f - interp) + instrument->waveforms[op].pcmFrames[0] * interp;
+            else
+                amp = instrument->waveforms[op].pcmFrames[pos] * (1.0f - interp) + instrument->waveforms[op].pcmFrames[pos + 1] * interp;
+
+            newFr.emplace_back(amp);
+        }
+
+        // Stretch right side.
+        for (int fr = 0; fr < len * (1.0f - duty); fr++)
+        {
+            int pos = (len / 2.0f) + (fr / (1.0f - duty)) / 2.0f;
+            float posF = (float(len) / 2.0f) + (float(fr) / (1.0f - duty)) / 2.0f;
+            float interp = posF - pos;
+
+            float amp;
+            if (pos == len - 1)
+                amp = instrument->waveforms[op].pcmFrames[pos] * (1.0f - interp) + instrument->waveforms[op].pcmFrames[0] * interp;
+            else
+                amp = instrument->waveforms[op].pcmFrames[pos] * (1.0f - interp) + instrument->waveforms[op].pcmFrames[pos + 1] * interp;
+
+            newFr.emplace_back(amp);
+        }
+
+
+
+        for (int fr = 0; fr < len; fr++)
+        {
+            instrument->waveforms[op].pcmFrames[fr] = newFr[fr];
+        }
+    }
+    
+
+    // Apply mirror.
+    //for (int fr = 0; fr < len; fr++)
+    //{
+    //    instrument->waveforms[op].pcmFrames.emplace_back(instrument->waveforms[op].pcmFrames[len - fr - 1]);
+    //}
+    
+
+
+
+    instrument->waveforms[op].loopStart = 0;
+    instrument->waveforms[op].loopEnd = instrument->waveforms[op].pcmFrames.size();
 
 
     return;
@@ -2673,8 +2439,7 @@ void ConstructWave(Instrument* instrument, int op, int waveType, float frequenci
                 periodPos -= waveLen;
             periodPos /= waveLen;
 
-            if (periodPos <= instrument->waveforms[op].dutyCycle)
-                vol += sin(float(x) * 2.0f * 6.28312 / periodLen) * frequencies[frequency] * 0.07f;
+            vol += sin(float(x) * 2.0f * 6.28312 / periodLen) * frequencies[frequency] * 0.07f;
 
 
             inputWave[x] += vol;
@@ -2683,7 +2448,7 @@ void ConstructWave(Instrument* instrument, int op, int waveType, float frequenci
         {
             float vol = 0;
 
-            float duty = instrument->waveforms[op].dutyCycle;
+            float duty = 0.5f;
 
             if (instrument->waveforms[op].generateFromSines)
             {
@@ -2785,13 +2550,10 @@ void ConstructWave(Instrument* instrument, int op, int waveType, float frequenci
                 periodPos -= waveLen;
             periodPos /= waveLen;
 
-            if (periodPos <= instrument->waveforms[op].dutyCycle)
-            {
-                if (periodPos > 0.5)
-                    vol += float(periodPos - 0.5f - 0.25f) * frequencies[frequency] * 0.07f * 4.0f;
-                else
-                    vol += (0.25f - float(periodPos)) * frequencies[frequency] * 0.07f * 4.0f;
-            }
+            if (periodPos > 0.5)
+                vol += float(periodPos - 0.5f - 0.25f) * frequencies[frequency] * 0.07f * 4.0f;
+            else
+                vol += (0.25f - float(periodPos)) * frequencies[frequency] * 0.07f * 4.0f;
 
             inputWave[x] += vol;
         }
@@ -2799,8 +2561,7 @@ void ConstructWave(Instrument* instrument, int op, int waveType, float frequenci
         {
             float vol = 0;
 
-            float duty = instrument->waveforms[op].dutyCycle;
-
+            
             if (instrument->waveforms[op].generateFromSines)
             {
                 float waveLen = float(periodLen * 0.5f);
@@ -2809,17 +2570,15 @@ void ConstructWave(Instrument* instrument, int op, int waveType, float frequenci
                     periodPos -= waveLen;
                 periodPos /= waveLen;
 
-                if (periodPos * 1.0f <= duty)
+
+                bool addSign = true;
+                for (int w = 1; w < instrument->waveforms[op].numOfSineWaves + 1; w++)
                 {
-                    bool addSign = true;
-                    for (int w = 1; w < instrument->waveforms[op].numOfSineWaves + 1; w++)
-                    {
-                        if (addSign)
-                            vol += (sin(periodPos * float(w) * 6.283f) * frequencies[frequency] * 0.05f) / float(w);
-                        else
-                            vol -= (sin(periodPos * float(w) * 6.283f) * frequencies[frequency] * 0.05f) / float(w);
-                        addSign = !addSign;
-                    }
+                    if (addSign)
+                        vol += (sin(periodPos * float(w) * 6.283f) * frequencies[frequency] * 0.05f) / float(w);
+                    else
+                        vol -= (sin(periodPos * float(w) * 6.283f) * frequencies[frequency] * 0.05f) / float(w);
+                    addSign = !addSign;
                 }
             }
             else
@@ -2834,55 +2593,51 @@ void ConstructWave(Instrument* instrument, int op, int waveType, float frequenci
 
                 float amplitude = frequencies[frequency] * 0.2f;
 
-                if (periodPos <= duty)
+                // Approximate y in a Bezier curve.
+                if (periodPos < round)
                 {
-
-                    // Approximate y in a Bezier curve.
-                    if (periodPos < round)
+                    float t = 0.5f;
+                    float interval = 0.5f;
+                    for (int j = 0; j < 32; j++)
                     {
-                        float t = 0.5f;
-                        float interval = 0.5f;
-                        for (int j = 0; j < 32; j++)
-                        {
-                            float estimate = (t * t) * round;
-                            interval *= 0.5f;
+                        float estimate = (t * t) * round;
+                        interval *= 0.5f;
 
-                            float posInCurve = periodPos;
+                        float posInCurve = periodPos;
 
-                            if (estimate > posInCurve)
-                                t -= interval;
-                            else
-                                t += interval;
-                        }
-                        float roundedVol = -(t * t) * (amplitude * round + amplitude * 0.5f) + t * amplitude + amplitude * 0.5f;
-
-
-                        vol -= (roundedVol)-amplitude * 0.5f;
+                        if (estimate > posInCurve)
+                            t -= interval;
+                        else
+                            t += interval;
                     }
-                    else if (periodPos > 1.0f - round)
+                    float roundedVol = -(t * t) * (amplitude * round + amplitude * 0.5f) + t * amplitude + amplitude * 0.5f;
+
+
+                    vol -= (roundedVol)-amplitude * 0.5f;
+                }
+                else if (periodPos > 1.0f - round)
+                {
+                    float t = 0.5f;
+                    float interval = 0.5f;
+                    for (int j = 0; j < 32; j++)
                     {
-                        float t = 0.5f;
-                        float interval = 0.5f;
-                        for (int j = 0; j < 32; j++)
-                        {
-                            float estimate = 1.0f - round + 2 * round * t - (t * t) * round;
-                            interval *= 0.5f;
+                        float estimate = 1.0f - round + 2 * round * t - (t * t) * round;
+                        interval *= 0.5f;
 
-                            float posInCurve = periodPos;
+                        float posInCurve = periodPos;
 
-                            if (estimate > posInCurve)
-                                t -= interval;
-                            else
-                                t += interval;
-                        }
-                        float roundedVol = -(t * t) * (amplitude * round + amplitude * 0.5f) + 2 * t * amplitude * round + amplitude - (amplitude * round);
-
-                        vol += (roundedVol)-amplitude * 0.5f;
+                        if (estimate > posInCurve)
+                            t -= interval;
+                        else
+                            t += interval;
                     }
-                    else
-                    {
-                        vol += (periodPos * amplitude) - amplitude * 0.5f;
-                    }
+                    float roundedVol = -(t * t) * (amplitude * round + amplitude * 0.5f) + 2 * t * amplitude * round + amplitude - (amplitude * round);
+
+                    vol += (roundedVol)-amplitude * 0.5f;
+                }
+                else
+                {
+                    vol += (periodPos * amplitude) - amplitude * 0.5f;
                 }
             }
 
@@ -2892,25 +2647,22 @@ void ConstructWave(Instrument* instrument, int op, int waveType, float frequenci
         {
             float vol = 0;
 
-            float duty = instrument->waveforms[op].dutyCycle;
-
+            
             float waveLen = float(periodLen * 1.0f);
             float periodPos = float(x);
             while (periodPos > waveLen)
                 periodPos -= waveLen;
             periodPos /= waveLen;
 
-            if (periodPos * 2.0f <= duty)
+            
+            bool addSign = true;
+            for (int w = 1; w < instrument->waveforms[op].numOfSineWaves * 4; w += 4)
             {
-                bool addSign = true;
-                for (int w = 1; w < instrument->waveforms[op].numOfSineWaves * 4; w += 4)
-                {
-                    if (addSign)
-                        vol += (sin(periodPos * float(w) * 6.283f) * frequencies[frequency] * 0.07f) / float(w);
-                    else
-                        vol -= (sin(periodPos * float(w) * 6.283f) * frequencies[frequency] * 0.07f) / float(w);
-                    addSign = !addSign;
-                }
+                if (addSign)
+                    vol += (sin(periodPos * float(w) * 6.283f) * frequencies[frequency] * 0.07f) / float(w);
+                else
+                    vol -= (sin(periodPos * float(w) * 6.283f) * frequencies[frequency] * 0.07f) / float(w);
+                addSign = !addSign;
             }
 
             inputWave[x] += vol;
@@ -2919,31 +2671,28 @@ void ConstructWave(Instrument* instrument, int op, int waveType, float frequenci
         {
             float vol = 0;
 
-            float duty = instrument->waveforms[op].dutyCycle;
-
+            
             float waveLen = float(periodLen * 1.0f);
             float periodPos = float(x);
             while (periodPos > waveLen)
                 periodPos -= waveLen;
             periodPos /= waveLen;
 
-            if (periodPos * 2.0f <= duty)
+
+            bool addSign = true;
+            for (int w = 1; w < instrument->waveforms[op].numOfSineWaves * 6; w += 2)
             {
-                bool addSign = true;
-                for (int w = 1; w < instrument->waveforms[op].numOfSineWaves * 6; w += 2)
+                if (addSign)
                 {
-                    if (addSign)
-                    {
-                        vol += (sin(periodPos * float(w) * 6.283f) * frequencies[frequency] * 0.07f) / float(w);
-                        vol -= abs(cos(periodPos * float(w) * 6.283f * 2.0f) * frequencies[frequency] * 0.07f) / float(w);
-                    }
-                    else
-                    {
-                        vol -= (sin(periodPos * float(w) * 6.283f) * frequencies[frequency] * 0.07f) / float(w);
-                        vol += abs(cos(periodPos * float(w) * 6.283f * 2.0f) * frequencies[frequency] * 0.07f) / float(w);
-                    }
-                    addSign = !addSign;
+                    vol += (sin(periodPos * float(w) * 6.283f) * frequencies[frequency] * 0.07f) / float(w);
+                    vol -= abs(cos(periodPos * float(w) * 6.283f * 2.0f) * frequencies[frequency] * 0.07f) / float(w);
                 }
+                else
+                {
+                    vol -= (sin(periodPos * float(w) * 6.283f) * frequencies[frequency] * 0.07f) / float(w);
+                    vol += abs(cos(periodPos * float(w) * 6.283f * 2.0f) * frequencies[frequency] * 0.07f) / float(w);
+                }
+                addSign = !addSign;
             }
 
             inputWave[x] += vol;
@@ -2961,21 +2710,20 @@ void ConstructWave(Instrument* instrument, int op, int waveType, float frequenci
             
 
 
-            if (periodPos <= instrument->waveforms[op].dutyCycle)
-            {
-                vol = sin(float(x) * 2.0f * 4.0f * 6.28312 / periodLen) * frequencies[frequency] * 0.02f;
+            vol = sin(float(x) * 2.0f * 4.0f * 6.28312 / periodLen) * frequencies[frequency] * 0.02f;
 
-                if (periodPos < 0.25f)
-                {
-                    float t = periodPos / 0.25f;
-                    vol = -(frequencies[frequency] * 0.08f) * (1.0f - t);
-                }
-                else if (periodPos >= 0.5f && periodPos < 0.75f)
-                {
-                    float t = (periodPos - 0.5f) / 0.25f;
-                    vol = -(frequencies[frequency] * 0.08f) * (1.0f - t);
-                }
+            if (periodPos < 0.25f)
+            {
+                float t = periodPos / 0.25f;
+                vol = -(frequencies[frequency] * 0.08f) * (1.0f - t);
             }
+            else if (periodPos >= 0.5f && periodPos < 0.75f)
+            {
+                float t = (periodPos - 0.5f) / 0.25f;
+                vol = -(frequencies[frequency] * 0.08f) * (1.0f - t);
+            }
+
+
 
             if (periodPos > 0.5f)
                 vol *= -1.0f;
@@ -3000,7 +2748,7 @@ void ConstructWave(Instrument* instrument, int op, int waveType, float frequenci
 void GenerateAllInstrumentWaves(Instrument *instrument)
 {
     sampleDisplay.drawing = false; // Stop sample drawing.
-    sampleDisplay.zoomed = false; // Reset zoom.
+
     for (int wave = 0; wave < 4; wave++)
     {
         GenerateAdditiveWave(instrument, wave);

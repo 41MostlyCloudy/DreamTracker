@@ -71,7 +71,6 @@ struct InstrumentWave
 
 	int fuzzType = 0; // 0 = clip, 1 = fold, 2 = ring fold
 
-	int loopType = 1; // 0 = None, 1 = forwards, 2 = bounce
 	int loopStart = 0;
 	int loopEnd = 0;
 
@@ -80,7 +79,7 @@ struct InstrumentWave
 	std::vector <float> pcmFrames = { };
 
 	// The duty cycle.
-	float dutyCycle = 1.0f;
+	float dutyCycle = 0.5f;
 	float smoothness = 1.0f; // Smoothness
 	int numOfSineWaves = 15;
 	float offset = 0.5f; // Offsets the wave volume from center = 0.5f.
@@ -103,6 +102,7 @@ struct InstrumentWave
 
 
 	// Boolean flags
+	bool loop = true;
 	bool generateFromSines = false; // The square and saw waves can be generated from sine waves for a slightly different sound.
 	bool reverseFrames = false;
 	bool pitchToNote = true;
@@ -136,6 +136,8 @@ struct InstrumentWave
 // An audio sample
 struct Instrument
 {
+	std::string name = "NewSample";
+
 	float volume = 1.0f;
 	float glide = 0.0f;
 	float scatter = 0.0f;
@@ -146,14 +148,11 @@ struct Instrument
 	int operatorMapping[4] = { 0, 1, 2, 3 }; // Which sample is mapped to each operator.
 
 	int modulationTypes[4] = { 0,0,0,0 };
-	float modScale[4] = { 0.0f,0.0f,0.0f,0.0f }; // Low-pass filter resonance values.
+	float modScale[4] = { 0.0f,0.0f,0.0f,0.0f };
 
 	float arpPitches[15] = { 7.75f,7.75f,7.75f,7.75f,7.75f,7.75f,7.75f,7.75f,7.75f,7.75f,7.75f,7.75f,7.75f,7.75f,7.75f };
 	float arpSpeed = 0.5f; // Arpeggiation speed in subdivisions of a beat.
 	float arpLength = 0.0f;
-
-	std::string name = "NewSample";
-	std::vector <int> jumpPoints = {};
 
 	
 
@@ -455,6 +454,9 @@ struct ChannelWaveform
 	int note = 0;
 
 
+	float jumpPoint = 0.0f;
+
+
 	float envelopeSpeed = 1.0f;
 
 	// Envelope
@@ -495,8 +497,8 @@ struct ChannelWaveform
 	float RC = (1.0f / (2.0f * 3.14159265f * 1.0f));
 	float alphaHigh = RC / (RC + (1.0f / 48000.0f));
 
-	float prevHighPassSample[2] = { 0.0f, 0.0f }; // Previous output sample (for filtering)
-	float prevHighPassSampleI[2] = { 0.0f, 0.0f }; // Previous output sample (for filtering)
+	float prevHighPassSample = 0.0f; // Previous output sample (for filtering)
+	float prevHighPassSampleI = 0.0f; // Previous output sample (for filtering)
 
 
 	
@@ -531,7 +533,7 @@ struct ChannelWaveform
 	}
 
 
-	void wrapReadPos(float loopType, float loopStart, float loopEnd)
+	void wrapReadPos(bool loop, float loopStart, float loopEnd)
 	{
 		if (loopStart == loopEnd)
 		{
@@ -539,45 +541,15 @@ struct ChannelWaveform
 			return;
 		}
 
-		if (loopType == 0) // No loop.
+		if (!loop) // No loop.
 		{
 			if (sampleReadPos >= loopEnd)
 				sampleReadPos = loopEnd - 1;
-			else if (sampleReadPos < loopStart)
-				sampleReadPos = loopStart;
 		}
-		else if (loopType < 2) // Forward loop.
+		else // Loop.
 		{
-			while (sampleReadPos < loopStart)
-				sampleReadPos += (loopEnd - loopStart);
 			while (sampleReadPos >= loopEnd)
 				sampleReadPos -= (loopEnd - loopStart);
-		}
-		else if (loopType == 2) // Bounce loop.
-		{
-			bool wrapped = false;
-			while (!wrapped)
-			{
-				if (sampleReadPos < loopStart)
-				{
-					sampleReadPos -= loopStart;
-					sampleReadPos *= -1.0f;
-					sampleReadPos += loopStart;
-					pitch *= -1.0f;
-					glideDest *= -1.0f;
-				}
-				else if (sampleReadPos >= loopEnd)
-				{
-					sampleReadPos -= loopEnd;
-					sampleReadPos *= -1.0f;
-					sampleReadPos += loopEnd;
-					sampleReadPos--;
-					pitch *= -1.0f;
-					glideDest *= -1.0f;
-				}
-				else
-					wrapped = true;
-			}
 		}
 
 		return;
@@ -595,7 +567,6 @@ struct Channel
 	int patternOffset = 0; // If set more than 0, decrement.
 	int offsetNote = 0;
 	int offsetInstrument = 0;
-	int offsetPos = 0;
 
 	bool muted = false;
 	bool solo = false;
@@ -607,17 +578,14 @@ struct Channel
 	ChannelWaveform waveforms[4];
 
 
-
 	float stereo = 0.5f; // (0 - 1) (L - R)
 
 
 	float volume = 1.0f;
-	float volumeSlide = 0.0f;
 
 	float pitchSlide = 0.0f;
 
 	float retrigger = 0.0f;
-	float retriggerSlide = 0.0f;
 	int retriggerTimer = 0;
 
 
@@ -627,8 +595,7 @@ struct Channel
 	int arpIndex = -1;
 	float arpOriginalNote = 0.0f;
 
-	float jumpSlide = 0.0f;
-	float jumpPoint = 0;
+	
 
 
 	int instrument = 0;
@@ -653,8 +620,17 @@ struct Channel
 
 			waveforms[wave].sampleRate = 1.0f;
 
-			// HIgh-pass filter.
+			waveforms[wave].jumpPoint = 0.0f;
+
+			// High-pass filter.
 			waveforms[wave].highPass = 0.0f;
+
+			// Low-pass filter
+			if (resetVolume)
+			{
+				waveforms[wave].y1 = 0; waveforms[wave].y2 = 0; waveforms[wave].y3 = 0; waveforms[wave].y4 = 0;
+				waveforms[wave].oldx = 0; waveforms[wave].oldy1 = 0; waveforms[wave].oldy2 = 0; waveforms[wave].oldy3 = 0;
+			}
 		}
 
 
@@ -663,16 +639,13 @@ struct Channel
 
 		if (resetVolume)
 			volume = 1.0f;
-		volumeSlide = 0.0f;
 
 
 		patternOffset = 0;
 
 		retrigger = 0.0f;
-		retriggerSlide = 0.0f;
 
-		jumpPoint = 0.0f;
-		jumpSlide = 0.0f;
+		
 
 		noteStopped = true;
 	}
@@ -786,7 +759,6 @@ struct SampleDisplay
 {
 	bool visible = false;
 
-	bool zoomed = false;
 
 	bool displayArp = false;
 
@@ -803,20 +775,12 @@ struct SampleDisplay
 	Vector2 drawWavePos; // { pos in frames, volume }
 
 	int sampleStartPos = 0;
-	int sampleSelectionEnd = 0;
 
-	int zoomStart = 0;
-	int zoomEnd = 0;
+
 
 	bool dragLoopStart = false;
 	bool dragLoopEnd = false;
 
-
-	float resampleNote = 48.0f;
-	float resampleFineTune = 0;
-	float resampleMultiplier = 1.0f;
-	float volumeMultiplier = 1.0f;
-	std::string resampleString = "000000000000000000";
 
 
 
@@ -838,7 +802,6 @@ struct SampleDisplay
 	Instrument SwapOperators(Instrument sample)
 	{
 		drawing = false; // Stop sample drawing.
-		zoomed = false; // Reset zoom.
 		InstrumentWave swapWaves[4];
 
 		for (int wave = 0; wave < 4; wave++)

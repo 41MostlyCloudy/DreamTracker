@@ -4,12 +4,7 @@ INSTRUMENT FILE FORMAT
 ----------------------------------------------------
 
 
-(1 byte) Number of Jump Points
 
-For each jump point:
-	|
-	| (4 bytes) Jump point value
-	|
 
 (1 byte) Operator mapping
 
@@ -55,7 +50,7 @@ For all 4 samples:
 	|	| (1 byte) Number of sine waves (for sine approx. wave types)
 	|	|
 	|
-	| (1 byte) Wave type + Loop type
+	| (1 byte) Wave type
 	|
 	| (1 byte) Offset + Octave
 	|
