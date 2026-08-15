@@ -71,7 +71,8 @@ RolledChannel rollPatternChannel(UnrolledPattern pattern, int ch)
 		{
 			newChannel.notes.emplace_back(toNextNote);
 			newChannel.notes.emplace_back(pattern.channels[ch].data[i].note);
-			newChannel.notes.emplace_back(pattern.channels[ch].data[i].instrument);
+			if (pattern.channels[ch].data[i].note != 255) // No instruments for stop notes.
+				newChannel.notes.emplace_back(pattern.channels[ch].data[i].instrument);
 			toNextNote = 0;
 		}
 		else
@@ -163,8 +164,15 @@ void unrollPatternChannel(UnrolledPattern* pattern, RolledChannel channel, int c
 		{
 			int nextNote = channel.notes[i + 1];
 			pattern->channels[ch].data[unrolledNoteIndex].note = nextNote;
-			nextNote = channel.notes[i + 2];
-			pattern->channels[ch].data[unrolledNoteIndex].instrument = nextNote;
+			if (nextNote == 255) // No instruments for stop notes.
+			{
+				i--;
+			}
+			else
+			{
+				nextNote = channel.notes[i + 2];
+				pattern->channels[ch].data[unrolledNoteIndex].instrument = nextNote;
+			}
 		}
 
 		unrolledNoteIndex++;

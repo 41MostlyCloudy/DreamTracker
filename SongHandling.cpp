@@ -1077,6 +1077,7 @@ void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uin
 }
 
 
+
 void PlayChannels(float* pOutputF32, ma_uint32 frameCount, ma_uint32 frameOffset)
 {
     for (int channel = 0; channel < 8; channel++)
@@ -1374,6 +1375,11 @@ void updateSongOnBeat()
             loadedSong.toNextChannelNote[ch] = 0;
             loadedSong.toNextChannelVolume[ch] = 0;
             loadedSong.toNextChannelEffect[ch] = 0;
+
+
+            int patternNumber = loadedSong.patternSequence[loadedSong.currentPattern];
+            int channelPatternNum = loadedSong.patterns[patternNumber].channelPatterns[ch];
+            channels[ch].stereo = loadedSong.channelPatterns[ch].patterns[channelPatternNum].stereo;
         }
     }
 
@@ -1531,11 +1537,15 @@ void updateChannelOnBeat(int ch)
             int note = loadedSong.channelPatterns[ch].patterns[loadedSong.patterns[loadedSong.patternSequence[loadedSong.currentPattern]].channelPatterns[ch]].notes[noteIndex];
             loadedSong.noteChannelIndex[ch]++;
             noteIndex++;
-            //channels[ch].pitch = note;
+            
 
-            int instrument = loadedSong.channelPatterns[ch].patterns[loadedSong.patterns[loadedSong.patternSequence[loadedSong.currentPattern]].channelPatterns[ch]].notes[noteIndex];
-            loadedSong.noteChannelIndex[ch]++;
-            noteIndex++;
+            int instrument = 0;
+            if (note != 255) // No instruments for stop notes.
+            {
+                instrument = loadedSong.channelPatterns[ch].patterns[loadedSong.patterns[loadedSong.patternSequence[loadedSong.currentPattern]].channelPatterns[ch]].notes[noteIndex];
+                loadedSong.noteChannelIndex[ch]++;
+                noteIndex++;
+            }
 
             // Set distance to next note.
             if (noteIndex < loadedSong.channelPatterns[ch].patterns[loadedSong.patterns[loadedSong.patternSequence[loadedSong.currentPattern]].channelPatterns[ch]].notes.size())
@@ -1568,7 +1578,7 @@ void updateChannelOnBeat(int ch)
                 float randVal = float(rand() % 4000) * loadedInstruments[channels[ch].instrument].scatter;
                 channels[ch].patternOffset += int(randVal);
 
-                if (channels[ch].patternOffset == 0) // Start offset note.
+                if (channels[ch].patternOffset == 0) // Start note.
                     StartNote(ch, instrument, note);
             }
         }
@@ -1700,6 +1710,10 @@ void StartOrStopSong()
 
 
 
+        int patternNumber = loadedSong.patternSequence[loadedSong.currentPattern];
+        int channelPatternNum = loadedSong.patterns[patternNumber].channelPatterns[ch];
+        channels[ch].stereo = loadedSong.channelPatterns[ch].patterns[channelPatternNum].stereo;
+
 
 
         for (int wave = 0; wave < 4; wave++)
@@ -1719,16 +1733,31 @@ void StartOrStopSong()
             channels[ch].waveforms[wave].oldy2 = 0.0f;
             channels[ch].waveforms[wave].oldy3 = 0.0f;
 
-            if (loadedSong.channelPatterns[ch].patterns[loadedSong.patterns[loadedSong.patternSequence[loadedSong.currentPattern]].channelPatterns[ch]].notes.size() > 1)
+
+
+            // Set pitch.
+            // If the pitch is 255, it is a stop note and the next note's pitch is taken.
+
+            float pitch = 0;
+            int firstNotePos = 1;
+
+            while (pitch == 0 && loadedSong.channelPatterns[ch].patterns[loadedSong.patterns[loadedSong.patternSequence[loadedSong.currentPattern]].channelPatterns[ch]].notes.size() > firstNotePos)
             {
-                // Set pitch.
-                float pitch = loadedSong.channelPatterns[ch].patterns[loadedSong.patterns[loadedSong.patternSequence[loadedSong.currentPattern]].channelPatterns[ch]].notes[1];
-                pitch -= loadedSong.edo * 4;
-                pitch = pow(2, pitch / loadedSong.edo);
-                channels[ch].waveforms[wave].pitch = pitch;
+                pitch = loadedSong.channelPatterns[ch].patterns[loadedSong.patterns[loadedSong.patternSequence[loadedSong.currentPattern]].channelPatterns[ch]].notes[firstNotePos];
+
+                if (pitch == 255)
+                {
+                    pitch = 0;
+                    firstNotePos += 2;
+                }
+                else
+                {
+                    pitch -= loadedSong.edo * 4;
+                    pitch = pow(2, pitch / loadedSong.edo);
+                }
             }
-            else
-                channels[ch].waveforms[wave].pitch = 0.0f;
+
+            channels[ch].waveforms[wave].pitch = pitch;
         }
 
 
@@ -2154,9 +2183,6 @@ void GenerateAdditiveWave(Instrument* instrument, int op)
 
                     interpVol *= (instrument->waveforms[op].frequencies[wave] + 2.0f) / 16.0f;
 
-                    if (x >= instrument->waveforms[op].dutyCycle * float(sampleLen)) // Duty cycle
-                        interpVol = 0.0f;
-
                     instrument->waveforms[op].pcmFrames[x] += interpVol;
                 }
             }
@@ -2458,13 +2484,10 @@ void ConstructWave(Instrument* instrument, int op, int waveType, float frequenci
                     periodPos -= waveLen;
                 periodPos /= waveLen;
 
-                if (periodPos <= duty)
+                bool addSign = true;
+                for (int w = 1; w < instrument->waveforms[op].numOfSineWaves * 2; w += 2)
                 {
-                    bool addSign = true;
-                    for (int w = 1; w < instrument->waveforms[op].numOfSineWaves * 2; w += 2)
-                    {
-                        vol += (sin(periodPos * float(w) * 6.283f) * frequencies[frequency] * 0.07f) / float(w);
-                    }
+                    vol += (sin(periodPos * float(w) * 6.283f) * frequencies[frequency] * 0.07f) / float(w);
                 }
             }
             else

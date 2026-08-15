@@ -1821,7 +1821,9 @@ void pressButton(GLFWwindow* window)
         {
             if (selectedX > 0 && selectedX < 10)
             {
-                loadedSong.channelPatterns[selectedChannel].patterns[loadedSong.patterns[loadedSong.currentPattern].channelPatterns[selectedChannel]].stereo = float(selectedX - 1) / 8.0f;
+                int pattern = loadedSong.patternSequence[loadedSong.currentPattern];
+                int chPat = loadedSong.patterns[pattern].channelPatterns[selectedChannel];
+                loadedSong.channelPatterns[selectedChannel].patterns[pattern].stereo = float(selectedX - 1) / 8.0f;
                 channels[selectedChannel].stereo = float(selectedX - 1) / 8.0f;
 
                 gui.drawFrameThisFrame = true;

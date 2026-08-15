@@ -18,7 +18,6 @@
 #include <glm/gtc/type_ptr.hpp>
 
 #include <thread>
-//#include <mutex>
 #include <shared_mutex>
 
 
@@ -161,12 +160,11 @@ struct Instrument
 
 
 
-
-
 struct GUITheme
 {
 	RGBColor uiColors[9];
 };
+
 
 
 struct ScrollBar
@@ -174,6 +172,7 @@ struct ScrollBar
 	float position = 0.0f;
 	bool drag = false;
 };
+
 
 
 struct GUI
@@ -250,6 +249,7 @@ struct GUI
 };
 
 
+
 struct Screen
 {
 	Vector2 screenSize;
@@ -265,6 +265,7 @@ struct Screen
 
 	bool windowed = false;
 };
+
 
 
 struct Editor
